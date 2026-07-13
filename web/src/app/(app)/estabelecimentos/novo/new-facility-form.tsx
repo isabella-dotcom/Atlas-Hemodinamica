@@ -1,36 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { createClient } from "@/lib/supabase/client";
+import { createFacilityAction } from "@/services/facilities/mutations";
+import { useToast } from "@/components/ui/toast";
 
 const schema = z.object({
-  name: z.string().min(3, "Informe o nome"),
-  city: z.string().min(2, "Informe a cidade"),
-  state_uf: z.string().length(2, "UF obrigatória"),
+  name: z.string().min(3),
+  trade_name: z.string().optional(),
+  city: z.string().min(2),
+  state_uf: z.string().length(2),
   cnes: z.string().optional(),
   cnpj: z.string().optional(),
   facility_type: z.string().optional(),
   has_hemodynamics: z.boolean(),
   attends_sus: z.enum(["unknown", "yes", "no"]),
   phone: z.string().optional(),
+  email: z.string().optional(),
   website: z.string().optional(),
+  address_street: z.string().optional(),
+  address_number: z.string().optional(),
+  address_district: z.string().optional(),
+  address_zip: z.string().optional(),
   notes: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
+const inputClass =
+  "w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm";
 
 export function NewFacilityForm() {
   const router = useRouter();
+  const { push } = useToast();
+  const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<FormData>({
+  const { register, handleSubmit } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       state_uf: "MG",
@@ -39,163 +46,83 @@ export function NewFacilityForm() {
     },
   });
 
-  async function onSubmit(values: FormData) {
+  function onSubmit(values: FormData) {
     setError(null);
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { data, error: insertError } = await supabase
-      .from("health_facilities")
-      .insert({
-        name: values.name.trim(),
-        city: values.city.trim(),
-        state_uf: values.state_uf.toUpperCase(),
-        cnes: values.cnes || null,
-        cnpj: values.cnpj || null,
-        facility_type: values.facility_type || null,
-        has_hemodynamics: values.has_hemodynamics,
-        attends_sus:
-          values.attends_sus === "unknown"
-            ? null
-            : values.attends_sus === "yes",
-        phone: values.phone || null,
-        website: values.website || null,
-        notes: values.notes || null,
-        layer: "candidato",
-        confidence_score: 20,
-        created_by: user?.id ?? null,
-      })
-      .select("id")
-      .single();
-
-    if (insertError || !data) {
-      setError(insertError?.message ?? "Falha ao salvar estabelecimento.");
-      return;
-    }
-
-    router.push(`/estabelecimentos/${data.id}`);
-    router.refresh();
+    startTransition(async () => {
+      const result = await createFacilityAction(values);
+      if (!result.success) {
+        setError(result.error.message);
+        push(result.error.message, "error");
+        return;
+      }
+      push("Estabelecimento criado.", "success");
+      router.push(`/estabelecimentos/${result.data.id}`);
+      router.refresh();
+    });
   }
 
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
-      className="max-w-xl space-y-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5"
+      className="max-w-3xl space-y-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5"
     >
-      <div>
-        <label className="mb-1.5 block text-sm">Nome</label>
-        <input
-          className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-          {...register("name")}
-        />
-        {errors.name ? (
-          <p className="mt-1 text-xs text-[var(--danger)]">
-            {errors.name.message}
-          </p>
-        ) : null}
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1.5 block text-sm">Cidade</label>
-          <input
-            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-            {...register("city")}
-          />
+          <label className="mb-1.5 block text-sm">Razão social / nome *</label>
+          <input className={inputClass} {...register("name")} />
         </div>
         <div>
-          <label className="mb-1.5 block text-sm">UF</label>
-          <input
-            maxLength={2}
-            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm uppercase"
-            {...register("state_uf")}
-          />
+          <label className="mb-1.5 block text-sm">Nome fantasia</label>
+          <input className={inputClass} {...register("trade_name")} />
         </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="mb-1.5 block text-sm">Cidade *</label>
+          <input className={inputClass} {...register("city")} />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm">UF *</label>
+          <input maxLength={2} className={`${inputClass} uppercase`} {...register("state_uf")} />
+        </div>
         <div>
           <label className="mb-1.5 block text-sm">CNES</label>
-          <input
-            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-            {...register("cnes")}
-          />
+          <input className={inputClass} {...register("cnes")} />
         </div>
         <div>
           <label className="mb-1.5 block text-sm">CNPJ</label>
-          <input
-            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-            {...register("cnpj")}
-          />
+          <input className={inputClass} {...register("cnpj")} />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm">Tipo</label>
+          <input className={inputClass} placeholder="Hospital, clínica…" {...register("facility_type")} />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm">Atende SUS</label>
+          <select className={inputClass} {...register("attends_sus")}>
+            <option value="unknown">Desconhecido</option>
+            <option value="yes">Sim</option>
+            <option value="no">Não</option>
+          </select>
         </div>
       </div>
-
-      <div>
-        <label className="mb-1.5 block text-sm">Tipo</label>
-        <input
-          placeholder="Hospital, clínica, serviço…"
-          className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-          {...register("facility_type")}
-        />
-      </div>
-
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" {...register("has_hemodynamics")} />
         Possui serviço de hemodinâmica
       </label>
-
-      <div>
-        <label className="mb-1.5 block text-sm">Atende SUS</label>
-        <select
-          className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-          {...register("attends_sus")}
-        >
-          <option value="unknown">Desconhecido</option>
-          <option value="yes">Sim</option>
-          <option value="no">Não</option>
-        </select>
+      <div className="grid gap-4 md:grid-cols-2">
+        <input className={inputClass} placeholder="Logradouro" {...register("address_street")} />
+        <input className={inputClass} placeholder="Número" {...register("address_number")} />
+        <input className={inputClass} placeholder="Bairro" {...register("address_district")} />
+        <input className={inputClass} placeholder="CEP" {...register("address_zip")} />
+        <input className={inputClass} placeholder="Telefone" {...register("phone")} />
+        <input className={inputClass} placeholder="E-mail" {...register("email")} />
+        <input className={inputClass} placeholder="Site" {...register("website")} />
       </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="mb-1.5 block text-sm">Telefone</label>
-          <input
-            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-            {...register("phone")}
-          />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-sm">Site</label>
-          <input
-            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-            {...register("website")}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="mb-1.5 block text-sm">Observações</label>
-        <textarea
-          rows={3}
-          className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-          {...register("notes")}
-        />
-      </div>
-
+      <textarea rows={3} className={inputClass} placeholder="Observações" {...register("notes")} />
       {error ? (
-        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-          {error}
-        </p>
+        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{error}</p>
       ) : null}
-
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-      >
-        {isSubmitting ? "Salvando…" : "Salvar estabelecimento"}
+      <button type="submit" disabled={pending} className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-white disabled:opacity-60">
+        {pending ? "Salvando…" : "Salvar estabelecimento"}
       </button>
     </form>
   );

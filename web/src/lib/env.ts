@@ -64,6 +64,8 @@ export const EXPECTED_MIGRATIONS = [
   "001_initial_schema.sql",
   "002_auth_and_storage.sql",
   "003_fix_auth_profile_and_policies.sql",
+  "004_unified_doctor_search.sql",
+  "005_audit_and_integrity_improvements.sql",
 ] as const;
 
 export const APP_VERSION = "0.1.0";

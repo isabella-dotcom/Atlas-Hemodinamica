@@ -1,73 +1,79 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import { ReviewActions } from "./review-actions";
-import type { Doctor, ReviewQueueItem } from "@/types/database";
+import { redirect } from "next/navigation";
+import { ReviewBadge } from "@/components/badges";
+import { PageHeader, EmptyState, ErrorState } from "@/components/ui/page";
+import { getCurrentProfile } from "@/lib/data";
+import { canWrite } from "@/lib/permissions";
+import { listReviewQueue } from "@/services/dashboard/queries";
+import { ReviewWorkbench } from "./review-workbench";
 
-type ReviewRow = ReviewQueueItem & {
-  doctors: Pick<
-    Doctor,
-    "id" | "full_name" | "city" | "state_uf" | "confidence_score" | "classification"
-  > | null;
-};
+type SearchParams = Promise<{ status?: string }>;
 
-export default async function ValidacaoPage() {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("review_queue")
-    .select(
-      "*, doctors(id, full_name, city, state_uf, confidence_score, classification)",
-    )
-    .in("status", ["pendente", "em_analise", "nova_revisao"])
-    .order("priority", { ascending: false })
-    .order("created_at", { ascending: true })
-    .limit(40);
+export default async function ValidacaoPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const profile = await getCurrentProfile();
+  if (!canWrite(profile?.role)) redirect("/acesso-negado");
 
-  const items = (data ?? []) as ReviewRow[];
+  const params = await searchParams;
+  const result = await listReviewQueue({ status: params.status });
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-[family-name:var(--font-display)] text-2xl text-[var(--ink)]">
-          Fila de validação
-        </h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          A decisão final é humana. A pontuação de confiança apenas apoia a
-          análise.
-        </p>
-      </div>
+      <PageHeader
+        title="Fila de validação"
+        description="A decisão final é humana. A pontuação apenas apoia a análise."
+        breadcrumbs={[{ label: "Validação" }]}
+      />
 
-      {error ? (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Não foi possível carregar a fila. Verifique o Supabase.
-        </p>
-      ) : null}
+      <form className="flex flex-wrap gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+        <select
+          name="status"
+          defaultValue={params.status ?? ""}
+          className="rounded-md border border-[var(--border)] px-3 py-2 text-sm"
+        >
+          <option value="">Pendentes / em análise</option>
+          <option value="pendente">Pendente</option>
+          <option value="em_analise">Em análise</option>
+          <option value="nova_revisao">Nova revisão</option>
+          <option value="aprovado">Aprovado</option>
+          <option value="rejeitado">Rejeitado</option>
+        </select>
+        <button type="submit" className="rounded-md bg-[var(--accent)] px-3 py-2 text-sm text-white">
+          Filtrar
+        </button>
+      </form>
 
-      <div className="space-y-3">
-        {items.length === 0 ? (
-          <p className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--muted)]">
-            Nenhuma pendência no momento.
-          </p>
-        ) : (
-          items.map((item) => (
+      {!result.success ? (
+        <ErrorState message={result.error.message} />
+      ) : result.data.length === 0 ? (
+        <EmptyState title="Nenhuma pendência no momento." />
+      ) : (
+        <div className="space-y-3">
+          {result.data.map((item) => (
             <article
               key={item.id}
               className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-[var(--muted)]">
-                    {item.status.replaceAll("_", " ")} · prioridade{" "}
-                    {item.priority}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ReviewBadge value={item.status} />
+                    <span className="text-xs text-[var(--muted)]">
+                      prioridade {item.priority} · {item.origin || "manual"}
+                    </span>
+                  </div>
                   {item.doctors ? (
                     <Link
                       href={`/medicos/${item.doctors.id}`}
-                      className="mt-1 block font-medium text-[var(--accent)] hover:underline"
+                      className="mt-2 block font-medium text-[var(--accent)] hover:underline"
                     >
                       {item.doctors.full_name}
                     </Link>
                   ) : (
-                    <p className="mt-1 font-medium">Item sem médico vinculado</p>
+                    <p className="mt-2 font-medium">Item sem médico</p>
                   )}
                   <p className="mt-1 text-sm text-[var(--ink-soft)]">
                     {[item.doctors?.city, item.doctors?.state_uf]
@@ -77,18 +83,22 @@ export default async function ValidacaoPage() {
                       ? ` · confiança ${item.doctors.confidence_score}%`
                       : ""}
                   </p>
-                  {item.notes ? (
+                  {item.reason || item.notes ? (
                     <p className="mt-2 text-sm text-[var(--muted)]">
-                      {item.notes}
+                      {item.reason || item.notes}
                     </p>
                   ) : null}
                 </div>
-                <ReviewActions reviewId={item.id} doctorId={item.doctor_id} />
+                <ReviewWorkbench
+                  reviewId={item.id}
+                  doctorId={item.doctor_id}
+                  status={item.status}
+                />
               </div>
             </article>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

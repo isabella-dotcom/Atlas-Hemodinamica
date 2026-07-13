@@ -1,154 +1,180 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { createClient } from "@/lib/supabase/client";
-import { normalizePersonName } from "@/lib/utils";
+import { createDoctorAction } from "@/services/doctors/mutations";
+import { useToast } from "@/components/ui/toast";
 
-const schema = z.object({
-  full_name: z.string().min(3, "Informe o nome completo"),
-  city: z.string().optional(),
-  state_uf: z
-    .string()
-    .length(2, "UF com 2 letras")
-    .or(z.literal(""))
-    .optional(),
-  crm_number: z.string().optional(),
-  crm_uf: z.string().length(2).or(z.literal("")).optional(),
+const formSchema = z.object({
+  full_name: z.string().trim().min(3, "Informe o nome completo"),
+  city: z.string().trim().min(2, "Informe a cidade"),
+  state_uf: z.string().trim().length(2, "UF com 2 letras"),
+  classification: z.enum(["possivel_candidato", "atuacao_provavel"]),
+  validation_status: z.enum(["nao_iniciada", "em_revisao"]),
+  confidence_score: z.number().int().min(0).max(100),
   notes: z.string().optional(),
+  crm_number: z.string().optional(),
+  crm_uf: z.string().optional(),
+  crm_status: z
+    .enum(["ativo", "inativo", "suspenso", "cancelado", "desconhecido"])
+    .optional(),
+  rqe_number: z.string().optional(),
+  rqe_uf: z.string().optional(),
+  specialty_id: z.string().optional(),
+  facility_id: z.string().optional(),
+  role_title: z.string().optional(),
+  department: z.string().optional(),
 });
 
-type FormData = z.infer<typeof schema>;
+type FormData = z.infer<typeof formSchema>;
 
-export function NewDoctorForm() {
+const inputClass =
+  "w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm";
+
+export function NewDoctorForm({
+  specialties,
+  facilities,
+}: {
+  specialties: { id: string; name: string }[];
+  facilities: { id: string; name: string; city: string; state_uf: string }[];
+}) {
   const router = useRouter();
+  const { push } = useToast();
+  const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: { state_uf: "MG", crm_uf: "MG" },
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      state_uf: "MG",
+      classification: "possivel_candidato",
+      validation_status: "nao_iniciada",
+      confidence_score: 10,
+      crm_uf: "MG",
+      rqe_uf: "MG",
+    },
   });
 
-  async function onSubmit(values: FormData) {
+  function onSubmit(values: FormData) {
     setError(null);
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { data: doctor, error: doctorError } = await supabase
-      .from("doctors")
-      .insert({
-        full_name: values.full_name.trim(),
-        normalized_name: normalizePersonName(values.full_name),
-        city: values.city || null,
-        state_uf: values.state_uf?.toUpperCase() || null,
-        notes: values.notes || null,
-        classification: "possivel_candidato",
-        layer: "candidato",
-        confidence_score: 10,
-        created_by: user?.id ?? null,
-      })
-      .select("id")
-      .single();
-
-    if (doctorError || !doctor) {
-      setError(
-        doctorError?.message ??
-          "Falha ao criar médico. Verifique permissões e schema.",
-      );
-      return;
-    }
-
-    if (values.crm_number && values.crm_uf) {
-      const { error: crmError } = await supabase
-        .from("medical_registrations")
-        .insert({
-          doctor_id: doctor.id,
-          registration_type: "CRM",
-          number: values.crm_number.trim(),
-          state_uf: values.crm_uf.toUpperCase(),
-          status: "desconhecido",
-          confidence_score: 20,
-          is_primary: true,
-        });
-
-      if (crmError) {
-        setError(
-          `Médico criado, mas CRM não foi salvo: ${crmError.message}`,
-        );
-        router.push(`/medicos/${doctor.id}`);
+    startTransition(async () => {
+      const result = await createDoctorAction(values);
+      if (!result.success) {
+        setError(result.error.message);
+        push(result.error.message, "error");
         return;
       }
-    }
-
-    await supabase.from("review_queue").insert({
-      doctor_id: doctor.id,
-      status: "pendente",
-      priority: 50,
-      notes: "Cadastro manual — aguardando validação humana",
+      push("Médico candidato criado com sucesso.", "success");
+      router.push(`/medicos/${result.data.id}`);
+      router.refresh();
     });
-
-    router.push(`/medicos/${doctor.id}`);
-    router.refresh();
   }
 
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
-      className="max-w-xl space-y-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5"
+      className="max-w-3xl space-y-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5"
     >
-      <Field label="Nome completo" error={errors.full_name?.message}>
-        <input
-          className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-          {...register("full_name")}
-        />
-      </Field>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Cidade">
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label="Nome completo *" error={errors.full_name?.message}>
+          <input className={inputClass} {...register("full_name")} />
+        </Field>
+        <Field label="Confiança inicial">
           <input
-            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-            {...register("city")}
+            type="number"
+            min={0}
+            max={100}
+            className={inputClass}
+            {...register("confidence_score", { valueAsNumber: true })}
           />
         </Field>
-        <Field label="UF" error={errors.state_uf?.message}>
-          <input
-            maxLength={2}
-            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm uppercase"
-            {...register("state_uf")}
-          />
+        <Field label="Cidade *" error={errors.city?.message}>
+          <input className={inputClass} {...register("city")} />
         </Field>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="CRM (número)">
-          <input
-            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-            {...register("crm_number")}
-          />
+        <Field label="UF *" error={errors.state_uf?.message}>
+          <input maxLength={2} className={`${inputClass} uppercase`} {...register("state_uf")} />
         </Field>
-        <Field label="CRM UF">
-          <input
-            maxLength={2}
-            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm uppercase"
-            {...register("crm_uf")}
-          />
+        <Field label="Classificação">
+          <select className={inputClass} {...register("classification")}>
+            <option value="possivel_candidato">Possível candidato</option>
+            <option value="atuacao_provavel">Atuação provável</option>
+          </select>
+        </Field>
+        <Field label="Status de validação">
+          <select className={inputClass} {...register("validation_status")}>
+            <option value="nao_iniciada">Não iniciada</option>
+            <option value="em_revisao">Em revisão</option>
+          </select>
         </Field>
       </div>
+
+      <fieldset className="grid gap-4 rounded-md border border-[var(--border)] p-4 md:grid-cols-3">
+        <legend className="px-1 text-sm font-medium">CRM (opcional)</legend>
+        <Field label="Número">
+          <input className={inputClass} {...register("crm_number")} />
+        </Field>
+        <Field label="UF">
+          <input maxLength={2} className={`${inputClass} uppercase`} {...register("crm_uf")} />
+        </Field>
+        <Field label="Situação">
+          <select className={inputClass} {...register("crm_status")}>
+            <option value="desconhecido">Desconhecido</option>
+            <option value="ativo">Ativo</option>
+            <option value="inativo">Inativo</option>
+            <option value="suspenso">Suspenso</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+        </Field>
+      </fieldset>
+
+      <fieldset className="grid gap-4 rounded-md border border-[var(--border)] p-4 md:grid-cols-3">
+        <legend className="px-1 text-sm font-medium">RQE (opcional)</legend>
+        <Field label="Número">
+          <input className={inputClass} {...register("rqe_number")} />
+        </Field>
+        <Field label="UF">
+          <input maxLength={2} className={`${inputClass} uppercase`} {...register("rqe_uf")} />
+        </Field>
+        <Field label="Especialidade">
+          <select className={inputClass} {...register("specialty_id")}>
+            <option value="">Selecionar</option>
+            {specialties.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </fieldset>
+
+      <fieldset className="grid gap-4 rounded-md border border-[var(--border)] p-4 md:grid-cols-2">
+        <legend className="px-1 text-sm font-medium">Vínculo inicial (opcional)</legend>
+        <Field label="Estabelecimento">
+          <select className={inputClass} {...register("facility_id")}>
+            <option value="">Não vincular agora</option>
+            {facilities.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name} · {f.city}/{f.state_uf}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Cargo">
+          <input className={inputClass} {...register("role_title")} />
+        </Field>
+        <Field label="Departamento">
+          <input className={inputClass} {...register("department")} />
+        </Field>
+      </fieldset>
 
       <Field label="Observações">
-        <textarea
-          rows={3}
-          className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-          {...register("notes")}
-        />
+        <textarea rows={3} className={inputClass} {...register("notes")} />
       </Field>
 
       {error ? (
@@ -158,16 +184,15 @@ export function NewDoctorForm() {
       ) : null}
 
       <p className="text-xs text-[var(--muted)]">
-        O registro entra como candidato e gera item na fila de validação. Não
-        vai para a base oficial automaticamente.
+        O registro entra como candidato e gera item na fila. Não há aprovação automática.
       </p>
 
       <button
         type="submit"
-        disabled={isSubmitting}
-        className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+        disabled={pending}
+        className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
       >
-        {isSubmitting ? "Salvando…" : "Salvar candidato"}
+        {pending ? "Salvando…" : "Salvar candidato"}
       </button>
     </form>
   );
@@ -184,13 +209,9 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-sm text-[var(--ink-soft)]">
-        {label}
-      </label>
+      <label className="mb-1.5 block text-sm text-[var(--ink-soft)]">{label}</label>
       {children}
-      {error ? (
-        <p className="mt-1 text-xs text-[var(--danger)]">{error}</p>
-      ) : null}
+      {error ? <p className="mt-1 text-xs text-[var(--danger)]">{error}</p> : null}
     </div>
   );
 }

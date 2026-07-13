@@ -1,25 +1,34 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/ui/page";
+import { getCurrentProfile } from "@/lib/data";
+import { canWrite } from "@/lib/permissions";
+import { listSpecialties } from "@/services/doctors/queries";
+import { listFacilitiesForSelect } from "@/services/facilities/queries";
 import { NewDoctorForm } from "./new-doctor-form";
 
-export default function NovoMedicoPage() {
+export default async function NovoMedicoPage() {
+  const profile = await getCurrentProfile();
+  if (!canWrite(profile?.role)) redirect("/acesso-negado");
+
+  const [specialties, facilities] = await Promise.all([
+    listSpecialties(),
+    listFacilitiesForSelect(),
+  ]);
+
   return (
-    <div className="space-y-6">
-      <div>
-        <Link
-          href="/medicos"
-          className="text-sm text-[var(--muted)] hover:text-[var(--accent)]"
-        >
-          ← Médicos
-        </Link>
-        <h2 className="mt-3 font-[family-name:var(--font-display)] text-2xl text-[var(--ink)]">
-          Novo médico candidato
-        </h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Cardiologista encontrado em fonte pública não é automaticamente
-          hemodinamicista.
-        </p>
-      </div>
-      <NewDoctorForm />
+    <div>
+      <PageHeader
+        title="Novo médico candidato"
+        description="Cardiologista em fonte pública não é automaticamente hemodinamicista."
+        breadcrumbs={[
+          { label: "Médicos", href: "/medicos" },
+          { label: "Novo" },
+        ]}
+      />
+      <NewDoctorForm
+        specialties={specialties.success ? specialties.data : []}
+        facilities={facilities.success ? facilities.data : []}
+      />
     </div>
   );
 }

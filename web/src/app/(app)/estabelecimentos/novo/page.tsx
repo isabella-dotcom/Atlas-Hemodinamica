@@ -1,20 +1,22 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/ui/page";
+import { getCurrentProfile } from "@/lib/data";
+import { canWrite } from "@/lib/permissions";
 import { NewFacilityForm } from "./new-facility-form";
 
-export default function NovoEstabelecimentoPage() {
+export default async function NovoEstabelecimentoPage() {
+  const profile = await getCurrentProfile();
+  if (!canWrite(profile?.role)) redirect("/acesso-negado");
+
   return (
-    <div className="space-y-6">
-      <div>
-        <Link
-          href="/estabelecimentos"
-          className="text-sm text-[var(--muted)] hover:text-[var(--accent)]"
-        >
-          ← Estabelecimentos
-        </Link>
-        <h2 className="mt-3 font-[family-name:var(--font-display)] text-2xl text-[var(--ink)]">
-          Novo estabelecimento
-        </h2>
-      </div>
+    <div>
+      <PageHeader
+        title="Novo estabelecimento"
+        breadcrumbs={[
+          { label: "Estabelecimentos", href: "/estabelecimentos" },
+          { label: "Novo" },
+        ]}
+      />
       <NewFacilityForm />
     </div>
   );

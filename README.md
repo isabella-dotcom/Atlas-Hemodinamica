@@ -10,6 +10,54 @@ Aplicação interna para construir, validar e manter a base nacional de médicos
 └── etl/                 # Python + pandas (importações)
 ```
 
+## Recursos implementados (núcleo MVP)
+
+- Autenticação Supabase + perfis (`master` / `analista` / `visualizador`)
+- Dashboard com indicadores, pendências e atividade recente
+- Busca unificada de médicos (RPC `search_doctors`)
+- CRUD de médicos, estabelecimentos, vínculos, contatos e evidências
+- Registros profissionais (CRM/RQE) e especialidades
+- Fila de validação com assumir / aprovar / rejeitar
+- Fontes, auditoria e gestão de usuários (Master)
+- Diagnóstico técnico (Master)
+- Pontuação de confiança explicável (`explain_doctor_confidence`)
+
+## Rotas
+
+| Rota | Descrição |
+|------|-----------|
+| `/login` | Acesso interno |
+| `/dashboard` | Indicadores |
+| `/medicos` | Busca e lista |
+| `/medicos/novo` | Cadastro de candidato |
+| `/medicos/[id]` | Detalhe com abas |
+| `/estabelecimentos` | Lista e filtros |
+| `/estabelecimentos/novo` | Cadastro |
+| `/estabelecimentos/[id]` | Detalhe com abas |
+| `/validacao` | Fila de validação |
+| `/importacoes` | Prévia bruta de arquivos |
+| `/fontes` | Catálogo de fontes |
+| `/auditoria` | Eventos de auditoria |
+| `/usuarios` | Papéis (Master) |
+| `/configuracoes/diagnostico` | Diagnóstico (Master) |
+| `/acesso-negado` | Sem permissão |
+
+## Fluxo operacional do MVP
+
+```text
+Cadastrar estabelecimento
+→ indicar serviço de hemodinâmica
+→ cadastrar ou importar candidato
+→ adicionar CRM e especialidade provável
+→ vincular ao estabelecimento
+→ adicionar contato institucional
+→ anexar evidência
+→ enviar para validação
+→ revisar
+→ aprovar ou rejeitar
+→ manter histórico
+```
+
 ## Camadas de dados
 
 1. **Bruto** — `import_batches` / `raw_records`
@@ -18,43 +66,47 @@ Aplicação interna para construir, validar e manter a base nacional de médicos
 
 Importações **nunca** aprovam automaticamente.
 
-Papéis no banco (`app_role`): `master`, `analista`, `visualizador` (viewer).
+## Migrations
 
-## Setup rápido (frontend)
+Execute nesta ordem no SQL Editor:
+
+1. `001_initial_schema.sql`
+2. `002_auth_and_storage.sql`
+3. `003_fix_auth_profile_and_policies.sql`
+4. `004_unified_doctor_search.sql` — busca, validation_status, evidências, confiança
+5. `005_audit_and_integrity_improvements.sql` — `write_audit_log`, índices e policies
+
+### 004 — motivo e impacto
+
+- Extensões `unaccent` e `pg_trgm`
+- Colunas: `validation_status`, `do_not_contact`, status de evidência, justificativa de coordenador
+- Funções: `search_doctors`, `explain_doctor_confidence`
+- Rollback manual: dropar funções/colunas/enums criados nesta migration
+
+### 005 — motivo e impacto
+
+- RPC `write_audit_log`
+- Constraints de unicidade (CRM principal, especialidade principal, contatos)
+- Validação de coordenador/datas em trigger
+- Rollback manual: dropar função/trigger/índices e restaurar policies anteriores
+
+## Estratégia de auditoria
+
+Auditoria de negócio é registrada pela **camada de serviços** (Server Actions) via RPC `write_audit_log`.  
+Não há triggers genéricos em todas as tabelas (evita ruído). Não duplicar o mesmo evento em trigger + serviço.
+
+## Setup
 
 ```bash
 cd web
 cp .env.example .env.local
-# preencha NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY
+# NEXT_PUBLIC_SUPABASE_URL=
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=
 npm install
 npm run dev
 ```
 
-A `SUPABASE_SERVICE_ROLE_KEY` **não** é necessária para o frontend.
-
-## Checklist de ativação do Supabase
-
-1. Criar projeto no Supabase.
-2. Abrir o **SQL Editor**.
-3. Executar as migrations **nesta ordem**:
-   - `supabase/migrations/001_initial_schema.sql`
-   - `supabase/migrations/002_auth_and_storage.sql`
-   - `supabase/migrations/003_fix_auth_profile_and_policies.sql`
-4. Confirmar tabelas principais (`doctors`, `health_facilities`, `doctor_facility_links`, `users_profile`, etc.).
-5. Confirmar RLS habilitado nas tabelas de domínio.
-6. Confirmar buckets privados `evidences` e `imports` em Storage.
-7. Criar o primeiro usuário em **Authentication → Users** (sem cadastro público na app).
-8. Confirmar criação automática do perfil:
-
-```sql
-select up.id, up.full_name, up.role, up.is_active, au.email
-from public.users_profile up
-join auth.users au on au.id = up.id
-order by up.created_at desc
-limit 20;
-```
-
-9. Promover o primeiro usuário para **Master** (use o e-mail real do Auth):
+Promover Master:
 
 ```sql
 update public.users_profile up
@@ -64,89 +116,59 @@ where up.id = au.id
   and au.email = 'seu@email.com';
 ```
 
-> A tabela `users_profile` possui coluna `email` (cópia para exibição), mas a promoção deve usar `auth.users` como fonte de verdade do login. O `id` de `users_profile` é o mesmo UUID de `auth.users` (não existe coluna `auth_user_id`).
-
-10. Em **Project Settings → API**, copiar **Project URL** e **anon public** key.
-11. Criar `web/.env.local`:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-```
-
-12. Executar `npm run dev` dentro de `web/`.
-13. Entrar no sistema com e-mail e senha do Auth.
-14. Abrir `/configuracoes/diagnostico` (somente Master) e clicar em **Executar diagnóstico**.
-15. Confirmar Dashboard com contadores zerados (ainda sem dados reais).
-16. Testar logout.
-17. Em janela anônima, confirmar redirecionamento de rotas protegidas para `/login`.
-
-### Fluxo de perfil
-
-```text
-Usuário criado no Supabase Auth
-→ trigger handle_new_user cria users_profile
-→ role inicial visualizador (viewer)
-→ Master promove manualmente para master ou analista
-```
-
-Ninguém é promovido automaticamente a Master.
-
 ## Matriz de permissões
 
-| Recurso                        | Master | Analista (Analyst) | Visualizador (Viewer) |
-| ------------------------------ | ------ | ------------------ | --------------------- |
-| Visualizar médicos oficiais    | Sim    | Sim                | Sim                   |
-| Criar e editar médicos         | Sim    | Sim                | Não                   |
-| Visualizar dados brutos        | Sim    | Sim                | Não                   |
-| Importar arquivos              | Sim    | Sim                | Não                   |
-| Validar candidatos             | Sim    | Sim                | Não                   |
-| Administrar usuários           | Sim    | Não                | Não                   |
-| Alterar papéis                 | Sim    | Não                | Não                   |
-| Visualizar auditoria completa  | Sim    | Parcial (próprios) | Não                   |
-| Exportar contatos              | Sim    | Conforme permissão | Não                   |
-| Alterar configurações críticas | Sim    | Não                | Não                   |
-| Diagnóstico técnico            | Sim    | Não                | Não                   |
+| Recurso                        | Master | Analista | Visualizador |
+| ------------------------------ | ------ | -------- | ------------ |
+| Visualizar médicos oficiais    | Sim    | Sim      | Sim          |
+| Criar e editar médicos         | Sim    | Sim      | Não          |
+| Visualizar dados brutos        | Sim    | Sim      | Não          |
+| Importar arquivos              | Sim    | Sim      | Não          |
+| Validar candidatos             | Sim    | Sim      | Não          |
+| Administrar usuários           | Sim    | Não      | Não          |
+| Alterar papéis                 | Sim    | Não      | Não          |
+| Visualizar auditoria completa  | Sim    | Parcial  | Não          |
+| Diagnóstico técnico            | Sim    | Não      | Não          |
 
-Entidades principais usam **exclusão lógica** (`is_deleted`), sem delete físico via policies.
+## Pontuação de confiança
 
-## ETL
+Faixas: 0–39 baixa · 40–59 precisa validação · 60–79 moderada · 80–100 alta.  
+A pontuação **não** promove automaticamente a `especialista_confirmado`.
 
-```bash
-cd etl
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python normalize_import.py caminho/arquivo.csv --preview
-pytest
-```
+## Contatos e evidências
 
-## Scripts web
+- Contatos com `do_not_contact` não entram como disponíveis na busca
+- Viewer não vê valores restritos/completos indevidos
+- Evidência não aprova automaticamente; status: pendente/aceita/rejeitada/expirada/necessita_revisao
+
+## Testes
 
 ```bash
 cd web
-npm install
 npm run lint
 npm run typecheck
 npm run test
 npm run build
+
+cd ../etl
+pytest
 ```
 
-## Regras críticas
+## Seed opcional
 
-- CRM = número + UF
-- Nome não é identificador único
-- Toda informação com fonte
-- Sem CPF
-- RLS ativo
-- Sem dados reais no GitHub
-- Sem scraping que contorne CAPTCHA/bloqueios
-- Sem aprovação automática na importação
+Não há seed automático de dados reais. O sistema funciona com banco vazio.  
+Não execute dados de médicos/hospitais reais no GitHub.
 
-## MVP (Minas Gerais)
+## Limitações atuais
 
-- 10–20 estabelecimentos com hemodinâmica
-- 50–100 médicos candidatos
-- 20–40 médicos validados
+- Sem coleta CFM/CNES/scraping
+- Sem WhatsApp, e-mail transacional, IA ou geolocalização
+- Importação ainda em modo prévia bruta (ETL externo)
+- Remote GitHub não configurado nesta etapa
 
-Não avance para dados reais até o diagnóstico Master estar verde.
+## Próximos passos
+
+1. Conectar Supabase real e aplicar migrations 001–005
+2. Validar diagnóstico Master
+3. Cadastrar estabelecimentos e candidatos fictícios de MG
+4. Evoluir importação CNES (futuro, com fonte oficial)
