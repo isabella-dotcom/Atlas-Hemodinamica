@@ -1,0 +1,58 @@
+# Dependencies
+node_modules/
+web/node_modules/
+**/node_modules/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+web/.env.local
+web/.env.production
+etl/.env
+supabase/.env
+
+# Next.js / build
+web/.next/
+web/out/
+web/coverage/
+.next/
+out/
+coverage/
+dist/
+build/
+
+# Data reais / arquivos de importação (nunca versionar)
+data/
+*.csv
+*.xlsx
+*.xls
+*.zip
+*.db
+*.sqlite
+*.sqlite3
+!etl/samples/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+etl/.venv/
+
+# Supabase CLI local
+supabase/.temp/
+supabase/.branches/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/settings.json
+
+# Logs / misc
+*.log
+.turbo/
+*.tsbuildinfo
