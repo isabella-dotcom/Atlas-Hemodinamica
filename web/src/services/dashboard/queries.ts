@@ -1,50 +1,19 @@
 import { createClient, hasSupabaseEnv } from "@/lib/supabase/server";
-import { ok, mapSupabaseError, type ServiceResult } from "@/lib/service-result";
+import { fail, mapSupabaseError, ok, type ServiceResult } from "@/lib/service-result";
 import type { AuditLog, DashboardStats, ReviewQueueItem, UsersProfile } from "@/types/database";
 
-const emptyStats: DashboardStats = {
-  totalMedicos: 0,
-  candidatos: 0,
-  emRevisao: 0,
-  parcialmenteValidados: 0,
-  validados: 0,
-  especialistasConfirmados: 0,
-  estabelecimentosAtivos: 0,
-  estabelecimentosHemo: 0,
-  vinculosAtivos: 0,
-  contatosDisponiveis: 0,
-  evidenciasPendentes: 0,
-  pendenciasValidacao: 0,
-  semCrm: 0,
-  semVinculo: 0,
-  semEvidencia: 0,
-  baixaConfianca: 0,
-  vinculosSemValidacaoRecente: 0,
-  hemoSemMedicos: 0,
-  porEstado: [],
-};
+const UNCONFIGURED =
+  "Supabase não configurado. Preencha web/.env.local antes de consultar o banco.";
 
-export async function getDashboardStats(): Promise<DashboardStats> {
-  if (!hasSupabaseEnv()) return emptyStats;
+export async function getDashboardStats(): Promise<ServiceResult<DashboardStats>> {
+  if (!hasSupabaseEnv()) {
+    return fail(UNCONFIGURED, "UNCONFIGURED");
+  }
 
   try {
     const supabase = await createClient();
 
-    const [
-      total,
-      candidatos,
-      emRevisao,
-      parcial,
-      validados,
-      especialistas,
-      facilities,
-      hemo,
-      links,
-      contacts,
-      evidences,
-      pending,
-      byState,
-    ] = await Promise.all([
+    const queries = await Promise.all([
       supabase.from("doctors").select("id", { count: "exact", head: true }).eq("is_deleted", false),
       supabase.from("doctors").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("layer", "candidato"),
       supabase.from("doctors").select("id", { count: "exact", head: true }).eq("is_deleted", false).eq("validation_status", "em_revisao"),
@@ -60,12 +29,39 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       supabase.from("doctors").select("state_uf").eq("is_deleted", false).not("state_uf", "is", null),
     ]);
 
-    // Pendências aproximadas (consultas leves)
-    const { data: doctors } = await supabase
+    const firstError = queries.find((q) => q.error)?.error;
+    if (firstError) {
+      return mapSupabaseError(
+        firstError,
+        "Não foi possível consultar o banco. Verifique migrations e permissões.",
+      );
+    }
+
+    const [
+      total,
+      candidatos,
+      emRevisao,
+      parcial,
+      validados,
+      especialistas,
+      facilities,
+      hemo,
+      links,
+      contacts,
+      evidences,
+      pending,
+      byState,
+    ] = queries;
+
+    const { data: doctors, error: doctorsError } = await supabase
       .from("doctors")
       .select("id, confidence_score")
       .eq("is_deleted", false)
       .limit(500);
+
+    if (doctorsError) {
+      return mapSupabaseError(doctorsError, "Não foi possível calcular pendências.");
+    }
 
     const doctorIds = (doctors ?? []).map((d) => d.id);
     let semCrm = 0;
@@ -74,14 +70,19 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     const baixaConfianca = (doctors ?? []).filter((d) => d.confidence_score < 60).length;
 
     if (doctorIds.length > 0) {
-      const [{ data: regs }, { data: linkRows }, { data: evRows }] = await Promise.all([
+      const detail = await Promise.all([
         supabase.from("medical_registrations").select("doctor_id").eq("registration_type", "CRM").in("doctor_id", doctorIds),
         supabase.from("doctor_facility_links").select("doctor_id").eq("is_deleted", false).in("doctor_id", doctorIds),
         supabase.from("evidences").select("entity_id").eq("entity_type", "doctor").in("entity_id", doctorIds),
       ]);
-      const withCrm = new Set((regs ?? []).map((r) => r.doctor_id));
-      const withLink = new Set((linkRows ?? []).map((r) => r.doctor_id));
-      const withEv = new Set((evRows ?? []).map((r) => r.entity_id));
+      const detailError = detail.find((d) => d.error)?.error;
+      if (detailError) {
+        return mapSupabaseError(detailError, "Não foi possível calcular pendências.");
+      }
+      const [regs, linkRows, evRows] = detail;
+      const withCrm = new Set((regs.data ?? []).map((r) => r.doctor_id));
+      const withLink = new Set((linkRows.data ?? []).map((r) => r.doctor_id));
+      const withEv = new Set((evRows.data ?? []).map((r) => r.entity_id));
       semCrm = doctorIds.filter((id) => !withCrm.has(id)).length;
       semVinculo = doctorIds.filter((id) => !withLink.has(id)).length;
       semEvidencia = doctorIds.filter((id) => !withEv.has(id)).length;
@@ -89,26 +90,36 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const { count: staleLinks } = await supabase
+    const { count: staleLinks, error: staleError } = await supabase
       .from("doctor_facility_links")
       .select("id", { count: "exact", head: true })
       .eq("is_deleted", false)
       .or(`last_validated_at.is.null,last_validated_at.lt.${thirtyDaysAgo.toISOString()}`);
+    if (staleError) {
+      return mapSupabaseError(staleError, "Não foi possível calcular vínculos desatualizados.");
+    }
 
-    const { data: hemoFacilities } = await supabase
+    const { data: hemoFacilities, error: hemoError } = await supabase
       .from("health_facilities")
       .select("id")
       .eq("is_deleted", false)
       .eq("has_hemodynamics", true)
       .limit(200);
+    if (hemoError) {
+      return mapSupabaseError(hemoError, "Não foi possível calcular hemo sem médicos.");
+    }
+
     const hemoIds = (hemoFacilities ?? []).map((f) => f.id);
     let hemoSemMedicos = 0;
     if (hemoIds.length > 0) {
-      const { data: hemoLinks } = await supabase
+      const { data: hemoLinks, error: hemoLinksError } = await supabase
         .from("doctor_facility_links")
         .select("facility_id")
         .eq("is_deleted", false)
         .in("facility_id", hemoIds);
+      if (hemoLinksError) {
+        return mapSupabaseError(hemoLinksError, "Não foi possível calcular hemo sem médicos.");
+      }
       const withDocs = new Set((hemoLinks ?? []).map((l) => l.facility_id));
       hemoSemMedicos = hemoIds.filter((id) => !withDocs.has(id)).length;
     }
@@ -119,7 +130,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       stateMap.set(uf, (stateMap.get(uf) ?? 0) + 1);
     }
 
-    return {
+    return ok({
       totalMedicos: total.count ?? 0,
       candidatos: candidatos.count ?? 0,
       emRevisao: emRevisao.count ?? 0,
@@ -141,16 +152,19 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       porEstado: Array.from(stateMap.entries())
         .map(([state_uf, totalCount]) => ({ state_uf, total: totalCount }))
         .sort((a, b) => b.total - a.total),
-    };
+    });
   } catch {
-    return emptyStats;
+    return fail(
+      "Não foi possível consultar o banco. Tente novamente ou abra o diagnóstico.",
+      "DASHBOARD_ERROR",
+    );
   }
 }
 
 export async function getRecentAudit(limit = 10): Promise<
   ServiceResult<(AuditLog & { users_profile: Pick<UsersProfile, "full_name"> | null })[]>
 > {
-  if (!hasSupabaseEnv()) return ok([]);
+  if (!hasSupabaseEnv()) return fail(UNCONFIGURED, "UNCONFIGURED");
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("audit_logs")
@@ -176,13 +190,11 @@ export async function listReviewQueue(filters?: {
     })[]
   >
 > {
-  if (!hasSupabaseEnv()) return ok([]);
+  if (!hasSupabaseEnv()) return fail(UNCONFIGURED, "UNCONFIGURED");
   const supabase = await createClient();
   let query = supabase
     .from("review_queue")
-    .select(
-      "*, doctors(id, full_name, confidence_score, city, state_uf)",
-    )
+    .select("*, doctors(id, full_name, confidence_score, city, state_uf)")
     .order("priority", { ascending: false })
     .order("created_at", { ascending: true })
     .limit(50);
@@ -204,7 +216,7 @@ export async function listAuditLogs(filters: {
   page?: number;
   pageSize?: number;
 }): Promise<ServiceResult<{ rows: AuditLog[]; total: number }>> {
-  if (!hasSupabaseEnv()) return ok({ rows: [], total: 0 });
+  if (!hasSupabaseEnv()) return fail(UNCONFIGURED, "UNCONFIGURED");
   const page = filters.page ?? 1;
   const pageSize = filters.pageSize ?? 20;
   const supabase = await createClient();
@@ -223,7 +235,7 @@ export async function listAuditLogs(filters: {
 }
 
 export async function listUsers(): Promise<ServiceResult<UsersProfile[]>> {
-  if (!hasSupabaseEnv()) return ok([]);
+  if (!hasSupabaseEnv()) return fail(UNCONFIGURED, "UNCONFIGURED");
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("users_profile")

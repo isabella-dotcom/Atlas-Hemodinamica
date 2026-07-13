@@ -119,6 +119,26 @@ export async function updateFacilityAction(
   if (values.source_id === "") patch.source_id = null;
   if (values.email === "") patch.email = null;
   if (values.website === "") patch.website = null;
+  if (values.last_validated_at === "") patch.last_validated_at = null;
+  if (values.cnes !== undefined) {
+    const cnes = values.cnes?.trim() || null;
+    patch.cnes = cnes;
+    if (cnes) {
+      const { data: existing } = await supabase
+        .from("health_facilities")
+        .select("id, name")
+        .eq("cnes", cnes)
+        .eq("is_deleted", false)
+        .neq("id", id)
+        .maybeSingle();
+      if (existing) {
+        return fail(
+          `O estabelecimento informado já possui o mesmo CNES (${existing.name}).`,
+          "DUPLICATE_CNES",
+        );
+      }
+    }
+  }
 
   const { error } = await supabase.from("health_facilities").update(patch).eq("id", id);
   if (error) {

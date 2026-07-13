@@ -32,35 +32,45 @@ export default async function EstabelecimentoDetalhePage({
   const facility = facilityResult.data;
   const supabase = await createClient();
 
-  const [{ data: links }, { data: contacts }, { data: evidences }, { data: audits }] =
-    await Promise.all([
-      supabase
-        .from("doctor_facility_links")
-        .select("*, doctors(id, full_name, classification)")
-        .eq("facility_id", id)
-        .eq("is_deleted", false),
-      supabase
-        .from("professional_contacts")
-        .select("*")
-        .eq("facility_id", id)
-        .eq("is_deleted", false),
-      supabase
-        .from("evidences")
-        .select("*")
-        .eq("entity_type", "facility")
-        .eq("entity_id", id),
-      supabase
-        .from("audit_logs")
-        .select("*")
-        .eq("entity_type", "facility")
-        .eq("entity_id", id)
-        .order("created_at", { ascending: false })
-        .limit(20),
-    ]);
+  const [linksRes, contactsRes, evidencesRes, auditsRes] = await Promise.all([
+    supabase
+      .from("doctor_facility_links")
+      .select("*, doctors(id, full_name, classification)")
+      .eq("facility_id", id)
+      .eq("is_deleted", false),
+    supabase
+      .from("professional_contacts")
+      .select("*")
+      .eq("facility_id", id)
+      .eq("is_deleted", false),
+    supabase
+      .from("evidences")
+      .select("*")
+      .eq("entity_type", "facility")
+      .eq("entity_id", id),
+    supabase
+      .from("audit_logs")
+      .select("*")
+      .eq("entity_type", "facility")
+      .eq("entity_id", id)
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
 
-  const typedLinks = (links ?? []) as (DoctorFacilityLink & {
+  const relatedError =
+    linksRes.error || contactsRes.error || evidencesRes.error || auditsRes.error;
+  if (relatedError) {
+    return (
+      <ErrorState message="Não foi possível carregar dados relacionados do estabelecimento. Tente novamente." />
+    );
+  }
+
+  const typedLinks = (linksRes.data ?? []) as (DoctorFacilityLink & {
     doctors: Pick<Doctor, "id" | "full_name" | "classification"> | null;
   })[];
+  const contacts = (contactsRes.data ?? []) as ProfessionalContact[];
+  const evidences = (evidencesRes.data ?? []) as Evidence[];
+  const audits = auditsRes.data ?? [];
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "visao", label: "Visão geral" },
@@ -81,6 +91,9 @@ export default async function EstabelecimentoDetalhePage({
         ]}
         actions={
           <PermissionGuard allowed={writable}>
+            <ButtonLink href={`/estabelecimentos/${id}/editar`} variant="secondary">
+              Editar
+            </ButtonLink>
             <FacilityActions facilityId={id} />
             <ButtonLink href={`/medicos/novo`} variant="secondary">
               Novo candidato
@@ -176,11 +189,15 @@ export default async function EstabelecimentoDetalhePage({
       {tab === "contatos" ? (
         <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5">
           <ul className="space-y-2 text-sm">
-            {((contacts ?? []) as ProfessionalContact[]).map((c) => (
-              <li key={c.id}>
-                {c.channel}: {c.value}
-              </li>
-            ))}
+            {contacts.length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">Nenhum contato cadastrado.</p>
+            ) : (
+              contacts.map((c) => (
+                <li key={c.id}>
+                  {c.channel}: {c.value}
+                </li>
+              ))
+            )}
           </ul>
         </section>
       ) : null}
@@ -188,9 +205,11 @@ export default async function EstabelecimentoDetalhePage({
       {tab === "evidencias" ? (
         <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5">
           <ul className="space-y-2 text-sm">
-            {((evidences ?? []) as Evidence[]).map((e) => (
-              <li key={e.id}>{e.title}</li>
-            ))}
+            {evidences.length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">Nenhuma evidência.</p>
+            ) : (
+              evidences.map((e) => <li key={e.id}>{e.title}</li>)
+            )}
           </ul>
         </section>
       ) : null}
@@ -198,11 +217,15 @@ export default async function EstabelecimentoDetalhePage({
       {tab === "historico" ? (
         <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5">
           <ul className="space-y-2 text-sm">
-            {(audits ?? []).map((a) => (
-              <li key={a.id}>
-                {a.action} · {new Date(a.created_at).toLocaleString("pt-BR")}
-              </li>
-            ))}
+            {audits.length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">Sem eventos de auditoria.</p>
+            ) : (
+              audits.map((a) => (
+                <li key={a.id}>
+                  {a.action} · {new Date(a.created_at).toLocaleString("pt-BR")}
+                </li>
+              ))
+            )}
           </ul>
         </section>
       ) : null}

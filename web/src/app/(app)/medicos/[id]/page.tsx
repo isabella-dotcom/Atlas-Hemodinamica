@@ -96,6 +96,26 @@ export default async function MedicoDetalhePage({
     supabase.from("data_sources").select("id, name").eq("is_active", true).order("name"),
   ]);
 
+  const relatedError =
+    linksRes.error ||
+    contactsRes.error ||
+    evidencesRes.error ||
+    auditRes.error ||
+    facilitiesRes.error ||
+    sourcesRes.error;
+  if (relatedError) {
+    return (
+      <ErrorState message="Não foi possível carregar dados relacionados do médico. Tente novamente." />
+    );
+  }
+
+  if (!registrations.success) {
+    return <ErrorState message={registrations.error.message} />;
+  }
+  if (!specialties.success) {
+    return <ErrorState message={specialties.error.message} />;
+  }
+
   const links = (linksRes.data ?? []) as (DoctorFacilityLink & {
     health_facilities: Pick<HealthFacility, "id" | "name" | "city" | "state_uf"> | null;
   })[];
@@ -164,13 +184,13 @@ export default async function MedicoDetalhePage({
       {tab === "visao" ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="Resumo">
-            <p className="text-sm">CRM/RQE: {(registrations.success ? registrations.data : []).map((r) => `${r.registration_type} ${r.number}/${r.state_uf}`).join(" · ") || "—"}</p>
-            <p className="mt-2 text-sm">Especialidade: {(specialties.success ? specialties.data : []).map((s) => s.specialties?.name).filter(Boolean).join(", ") || "—"}</p>
+            <p className="text-sm">CRM/RQE: {registrations.data.map((r) => `${r.registration_type} ${r.number}/${r.state_uf}`).join(" · ") || "—"}</p>
+            <p className="mt-2 text-sm">Especialidade: {specialties.data.map((s) => s.specialties?.name).filter(Boolean).join(", ") || "—"}</p>
             <p className="mt-2 text-sm">Vínculo principal: {links[0]?.health_facilities?.name || "—"}</p>
             <p className="mt-2 text-sm">Observações: {doctor.notes || "—"}</p>
           </Card>
           <Card title="Qualidade do cadastro">
-            {confidence.success && confidence.data ? (
+            {confidence.success ? (
               <div className="space-y-2 text-sm">
                 <p>
                   Pontuação: <strong>{confidence.data.score}%</strong> ·{" "}
@@ -187,9 +207,7 @@ export default async function MedicoDetalhePage({
                 <p className="text-xs text-[var(--muted)]">{confidence.data.note}</p>
               </div>
             ) : (
-              <p className="text-sm text-[var(--muted)]">
-                Aplique a migration 004 para ver a explicação da confiança.
-              </p>
+              <p className="text-sm text-rose-800">{confidence.error.message}</p>
             )}
           </Card>
         </div>
@@ -198,7 +216,7 @@ export default async function MedicoDetalhePage({
       {tab === "registros" ? (
         <Card title="CRM / RQE">
           <ul className="space-y-2">
-            {(registrations.success ? registrations.data : []).map((reg) => (
+            {registrations.data.map((reg) => (
               <li key={reg.id} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm">
                 <strong>{reg.registration_type}</strong> {reg.number}/{reg.state_uf} · {reg.status}
                 {reg.is_primary ? " · principal" : ""}
@@ -219,7 +237,7 @@ export default async function MedicoDetalhePage({
       {tab === "especialidades" ? (
         <Card title="Especialidades">
           <ul className="space-y-2">
-            {(specialties.success ? specialties.data : []).map((item) => (
+            {specialties.data.map((item) => (
               <li key={item.id} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm">
                 {item.specialties?.name ?? "Especialidade"}
                 {item.is_primary ? " · principal" : ""}

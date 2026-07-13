@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader, ErrorState } from "@/components/ui/page";
 import { getCurrentProfile } from "@/lib/data";
 import { canWrite } from "@/lib/permissions";
 import { listSpecialties } from "@/services/doctors/queries";
@@ -15,6 +15,24 @@ export default async function NovoMedicoPage() {
     listFacilitiesForSelect(),
   ]);
 
+  if (!specialties.success) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title="Novo médico candidato" />
+        <ErrorState message={specialties.error.message} />
+      </div>
+    );
+  }
+
+  if (!facilities.success) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title="Novo médico candidato" />
+        <ErrorState message={facilities.error.message} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
@@ -26,8 +44,8 @@ export default async function NovoMedicoPage() {
         ]}
       />
       <NewDoctorForm
-        specialties={specialties.success ? specialties.data : []}
-        facilities={facilities.success ? facilities.data : []}
+        specialties={specialties.data}
+        facilities={facilities.data}
       />
     </div>
   );

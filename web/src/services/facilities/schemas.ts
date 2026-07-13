@@ -24,6 +24,7 @@ export const facilityCreateSchema = z.object({
   attends_sus: z.enum(["unknown", "yes", "no"]).default("unknown"),
   has_hemodynamics: z.boolean().default(true),
   service_status: z.string().optional(),
+  last_validated_at: z.string().optional().or(z.literal("")),
   source_id: z.string().uuid().optional().or(z.literal("")),
   notes: z.string().optional(),
   confidence_score: z.coerce.number().int().min(0).max(100).default(20),

@@ -7,168 +7,185 @@ Aplicação interna para construir, validar e manter a base nacional de médicos
 ```
 ├── web/                 # Next.js + TypeScript + Tailwind
 ├── supabase/migrations/ # Schema PostgreSQL + RLS
+├── supabase/seed/       # Seed fictício opcional
 └── etl/                 # Python + pandas (importações)
 ```
 
-## Recursos implementados (núcleo MVP)
+Papéis no banco (`app_role`): `master`, `analista`, `visualizador`.
 
-- Autenticação Supabase + perfis (`master` / `analista` / `visualizador`)
-- Dashboard com indicadores, pendências e atividade recente
-- Busca unificada de médicos (RPC `search_doctors`)
-- CRUD de médicos, estabelecimentos, vínculos, contatos e evidências
-- Registros profissionais (CRM/RQE) e especialidades
-- Fila de validação com assumir / aprovar / rejeitar
-- Fontes, auditoria e gestão de usuários (Master)
-- Diagnóstico técnico (Master)
-- Pontuação de confiança explicável (`explain_doctor_confidence`)
+## Conexão ao Supabase
 
-## Rotas
+1. Criar projeto no Supabase.
+2. SQL Editor — executar nesta ordem:
+   - `001_initial_schema.sql`
+   - `002_auth_and_storage.sql`
+   - `003_fix_auth_profile_and_policies.sql`
+   - `004_unified_doctor_search.sql`
+   - `005_audit_and_integrity_improvements.sql`
+   - `006_supabase_integration_fixes.sql`
+3. Confirmar buckets privados `imports` e `evidences`.
+4. Criar usuários **somente no Auth** (sem cadastro público na app):
+   - Master, Analista, Visualizador (e-mails de teste do proprietário).
+5. Confirmar perfil automático:
 
-| Rota | Descrição |
-|------|-----------|
-| `/login` | Acesso interno |
-| `/dashboard` | Indicadores |
-| `/medicos` | Busca e lista |
-| `/medicos/novo` | Cadastro de candidato |
-| `/medicos/[id]` | Detalhe com abas |
-| `/estabelecimentos` | Lista e filtros |
-| `/estabelecimentos/novo` | Cadastro |
-| `/estabelecimentos/[id]` | Detalhe com abas |
-| `/validacao` | Fila de validação |
-| `/importacoes` | Prévia bruta de arquivos |
-| `/fontes` | Catálogo de fontes |
-| `/auditoria` | Eventos de auditoria |
-| `/usuarios` | Papéis (Master) |
-| `/configuracoes/diagnostico` | Diagnóstico (Master) |
-| `/acesso-negado` | Sem permissão |
-
-## Fluxo operacional do MVP
-
-```text
-Cadastrar estabelecimento
-→ indicar serviço de hemodinâmica
-→ cadastrar ou importar candidato
-→ adicionar CRM e especialidade provável
-→ vincular ao estabelecimento
-→ adicionar contato institucional
-→ anexar evidência
-→ enviar para validação
-→ revisar
-→ aprovar ou rejeitar
-→ manter histórico
+```sql
+select up.id, up.full_name, up.role, up.is_active, au.email
+from public.users_profile up
+join auth.users au on au.id = up.id
+order by up.created_at desc;
 ```
 
-## Camadas de dados
-
-1. **Bruto** — `import_batches` / `raw_records`
-2. **Candidato** — registros normalizados aguardando revisão
-3. **Oficial** — aprovados por usuário autorizado
-
-Importações **nunca** aprovam automaticamente.
-
-## Migrations
-
-Execute nesta ordem no SQL Editor:
-
-1. `001_initial_schema.sql`
-2. `002_auth_and_storage.sql`
-3. `003_fix_auth_profile_and_policies.sql`
-4. `004_unified_doctor_search.sql` — busca, validation_status, evidências, confiança
-5. `005_audit_and_integrity_improvements.sql` — `write_audit_log`, índices e policies
-
-### 004 — motivo e impacto
-
-- Extensões `unaccent` e `pg_trgm`
-- Colunas: `validation_status`, `do_not_contact`, status de evidência, justificativa de coordenador
-- Funções: `search_doctors`, `explain_doctor_confidence`
-- Rollback manual: dropar funções/colunas/enums criados nesta migration
-
-### 005 — motivo e impacto
-
-- RPC `write_audit_log`
-- Constraints de unicidade (CRM principal, especialidade principal, contatos)
-- Validação de coordenador/datas em trigger
-- Rollback manual: dropar função/trigger/índices e restaurar policies anteriores
-
-## Estratégia de auditoria
-
-Auditoria de negócio é registrada pela **camada de serviços** (Server Actions) via RPC `write_audit_log`.  
-Não há triggers genéricos em todas as tabelas (evita ruído). Não duplicar o mesmo evento em trigger + serviço.
-
-## Setup
-
-```bash
-cd web
-cp .env.example .env.local
-# NEXT_PUBLIC_SUPABASE_URL=
-# NEXT_PUBLIC_SUPABASE_ANON_KEY=
-npm install
-npm run dev
-```
-
-Promover Master:
+6. Promover papéis (use o e-mail real do Auth; **não** use `analyst`/`viewer` — os valores corretos são `analista`/`visualizador`):
 
 ```sql
 update public.users_profile up
 set role = 'master'
 from auth.users au
 where up.id = au.id
-  and au.email = 'seu@email.com';
+  and au.email = 'EMAIL_DO_MASTER';
+
+update public.users_profile up
+set role = 'analista'
+from auth.users au
+where up.id = au.id
+  and au.email = 'EMAIL_DO_ANALISTA';
 ```
 
-## Matriz de permissões
+O Visualizador permanece com `visualizador` (padrão do trigger).
 
-| Recurso                        | Master | Analista | Visualizador |
-| ------------------------------ | ------ | -------- | ------------ |
-| Visualizar médicos oficiais    | Sim    | Sim      | Sim          |
-| Criar e editar médicos         | Sim    | Sim      | Não          |
-| Visualizar dados brutos        | Sim    | Sim      | Não          |
-| Importar arquivos              | Sim    | Sim      | Não          |
-| Validar candidatos             | Sim    | Sim      | Não          |
-| Administrar usuários           | Sim    | Não      | Não          |
-| Alterar papéis                 | Sim    | Não      | Não          |
-| Visualizar auditoria completa  | Sim    | Parcial  | Não          |
-| Diagnóstico técnico            | Sim    | Não      | Não          |
+7. Copiar Project URL + anon key.
+8. Criar `web/.env.local` (nunca versionar):
 
-## Pontuação de confiança
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+```
 
-Faixas: 0–39 baixa · 40–59 precisa validação · 60–79 moderada · 80–100 alta.  
-A pontuação **não** promove automaticamente a `especialista_confirmado`.
+9. `cd web && npm install && npm run dev`
+10. Login → `/configuracoes/diagnostico` (Master) → **Executar diagnóstico**.
 
-## Contatos e evidências
+A `SUPABASE_SERVICE_ROLE_KEY` **não** é necessária no frontend.
 
-- Contatos com `do_not_contact` não entram como disponíveis na busca
-- Viewer não vê valores restritos/completos indevidos
-- Evidência não aprova automaticamente; status: pendente/aceita/rejeitada/expirada/necessita_revisao
+### Smoke SQL pós-migration
 
-## Testes
+```sql
+select extensions.unaccent('Hemodinâmica');
+select public.normalize_search_text('José da Silva');
+select public.diagnostic_foundation_check(); -- somente Master
+```
+
+## Validação ponta a ponta (checklist)
+
+Com Master, após `.env.local` válido:
+
+1. Diagnóstico verde (tabelas, RPCs, buckets)
+2. Cadastrar estabelecimento fictício com hemodinâmica + SUS
+3. Editar estabelecimento (`/estabelecimentos/[id]/editar`)
+4. Contato institucional + evidência
+5. Cadastrar médico candidato + CRM + RQE + especialidade
+6. Vincular (coordenador **provável** com justificativa)
+7. Contato profissional + evidência
+8. Enviar à fila → assumir → mais info → aprovar
+9. Buscar por nome/CRM/cidade/sem acento
+10. Arquivar e restaurar médico
+11. Confirmar auditoria
+12. Repetir leituras com Analista e Visualizador (URLs diretas)
+
+## Dados fictícios
+
+```sql
+-- aplicar (revisão manual)
+\i supabase/seed/validation_demo_data.sql
+
+-- limpar somente demo
+\i supabase/seed/cleanup_validation_demo_data.sql
+```
+
+- Prefixo `[DEMO-ATLAS]`
+- Domínio `example.com`
+- Telefones/CNES/CNPJ claramente fictícios
+- **Não** executar seed em produção sem revisão
+
+## Testes por papel
+
+| Papel | Pode | Não pode |
+|-------|------|----------|
+| Master | tudo operacional + usuários + diagnóstico + auditoria completa | — |
+| Analista | CRUD operacional + validação + auditoria própria | promover papéis, diagnóstico, configs críticas |
+| Visualizador | consultar oficiais autorizados | criar/editar/validar/importar/auditoria/usuários/diagnóstico |
+
+Policies + Server Actions bloqueiam escalonamento; UI apenas esconde botões.
+
+## Testes integrados (E2E)
+
+Preparados com Playwright. **Não foram executados** sem `.env.local` / credenciais de teste.
 
 ```bash
 cd web
+# preencha web/.env.e2e (ignorado pelo Git) ou exporte:
+# E2E_BASE_URL=http://127.0.0.1:3000
+# E2E_SUPABASE_PROJECT_REF=projeto-de-teste
+# E2E_ALLOW_DESTRUCTIVE_TESTS=true
+# E2E_MASTER_EMAIL=...
+# E2E_MASTER_PASSWORD=...
+npx playwright install chromium
+npm run test:e2e
+```
+
+Proteções: exige `E2E_ALLOW_DESTRUCTIVE_TESTS=true`, hostname local e `E2E_SUPABASE_PROJECT_REF`.
+
+## Erros comuns
+
+| Sintoma | Ação |
+|---------|------|
+| “Supabase não configurado” | Criar `web/.env.local` |
+| RPC search_doctors falhou | Aplicar 004 (+ 006) |
+| Bucket indisponível | Aplicar 002 |
+| Perfil ausente | Conferir trigger 002/003 |
+| RLS bloqueando | Papel/ativo + policies 003/005/006 |
+| unaccent não encontrado | Schema `extensions` + migration 006 |
+| Usuário inativo | Master reativa em `/usuarios` |
+
+## Migration 006
+
+Correções:
+
+- schema `extensions` + grants de `normalize_search_text`
+- `audit_logs` insert exige `actor_id = auth.uid()`
+- self-insert de perfil só como `visualizador`
+- RPC `diagnostic_foundation_check` (Master)
+
+## Limitações atuais
+
+- Sem CNES/CFM automático, scraping, WhatsApp, IA
+- Importação ainda em prévia bruta
+- Integração real depende de `web/.env.local` do proprietário
+- E2E preparado, não executado sem credenciais
+
+## Comandos
+
+```bash
+cd web
+npm install
 npm run lint
 npm run typecheck
 npm run test
 npm run build
+# npm run test:e2e  # somente com env de teste
 
 cd ../etl
 pytest
 ```
 
-## Seed opcional
+## Fluxo operacional do MVP
 
-Não há seed automático de dados reais. O sistema funciona com banco vazio.  
-Não execute dados de médicos/hospitais reais no GitHub.
-
-## Limitações atuais
-
-- Sem coleta CFM/CNES/scraping
-- Sem WhatsApp, e-mail transacional, IA ou geolocalização
-- Importação ainda em modo prévia bruta (ETL externo)
-- Remote GitHub não configurado nesta etapa
-
-## Próximos passos
-
-1. Conectar Supabase real e aplicar migrations 001–005
-2. Validar diagnóstico Master
-3. Cadastrar estabelecimentos e candidatos fictícios de MG
-4. Evoluir importação CNES (futuro, com fonte oficial)
+```text
+Cadastrar estabelecimento
+→ indicar hemodinâmica
+→ cadastrar candidato
+→ CRM/especialidade
+→ vínculo + contato + evidência
+→ fila de validação
+→ aprovar/rejeitar
+→ histórico
+```

@@ -17,18 +17,21 @@ export type FacilitySearchParams = {
   pageSize?: string;
 };
 
+const UNCONFIGURED =
+  "Supabase não configurado. Preencha web/.env.local antes de consultar o banco.";
+
 export async function searchFacilities(
   params: FacilitySearchParams,
 ): Promise<
   ServiceResult<{
-    rows: (HealthFacility & { links_count?: number })[];
+    rows: HealthFacility[];
     total: number;
     page: number;
     pageSize: number;
   }>
 > {
   if (!hasSupabaseEnv()) {
-    return ok({ rows: [], total: 0, page: 1, pageSize: 20 });
+    return fail(UNCONFIGURED, "UNCONFIGURED");
   }
 
   const page = parsePage(params.page);
@@ -61,11 +64,17 @@ export async function searchFacilities(
 
   if (toBoolParam(params.withoutDoctors) === true && rows.length > 0) {
     const ids = rows.map((r) => r.id);
-    const { data: links } = await supabase
+    const { data: links, error: linkError } = await supabase
       .from("doctor_facility_links")
       .select("facility_id")
       .in("facility_id", ids)
       .eq("is_deleted", false);
+    if (linkError) {
+      return mapSupabaseError(
+        linkError,
+        "Não foi possível aplicar o filtro de estabelecimentos sem médicos.",
+      );
+    }
     const withDoctors = new Set((links ?? []).map((l) => l.facility_id));
     rows = rows.filter((r) => !withDoctors.has(r.id));
   }
@@ -81,7 +90,7 @@ export async function searchFacilities(
 export async function getFacilityById(
   id: string,
 ): Promise<ServiceResult<HealthFacility>> {
-  if (!hasSupabaseEnv()) return fail("Supabase não configurado.");
+  if (!hasSupabaseEnv()) return fail(UNCONFIGURED, "UNCONFIGURED");
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("health_facilities")
@@ -98,7 +107,7 @@ export async function getFacilityById(
 export async function listFacilitiesForSelect(): Promise<
   ServiceResult<{ id: string; name: string; city: string; state_uf: string }[]>
 > {
-  if (!hasSupabaseEnv()) return ok([]);
+  if (!hasSupabaseEnv()) return fail(UNCONFIGURED, "UNCONFIGURED");
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("health_facilities")

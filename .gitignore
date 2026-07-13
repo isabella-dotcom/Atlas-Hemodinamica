@@ -10,8 +10,15 @@ web/node_modules/
 !**/.env.example
 web/.env.local
 web/.env.production
+web/.env.e2e
 etl/.env
 supabase/.env
+
+# E2E artifacts
+web/test-results/
+web/playwright-report/
+web/blob-report/
+web/playwright/.cache/
 
 # Next.js / build
 web/.next/

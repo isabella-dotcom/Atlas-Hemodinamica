@@ -9,6 +9,7 @@ import type {
   MedicalRegistration,
   ValidationStatus,
   DoctorClassification,
+  Specialty,
 } from "@/types/database";
 
 export type DoctorSearchParams = {
@@ -32,13 +33,16 @@ export type DoctorSearchParams = {
   sortDir?: string;
 };
 
+const UNCONFIGURED =
+  "Supabase não configurado. Preencha web/.env.local antes de consultar o banco.";
+
 export async function searchDoctors(
   params: DoctorSearchParams,
 ): Promise<
   ServiceResult<{ rows: DoctorSearchRow[]; total: number; page: number; pageSize: number }>
 > {
   if (!hasSupabaseEnv()) {
-    return ok({ rows: [], total: 0, page: 1, pageSize: 20 });
+    return fail(UNCONFIGURED, "UNCONFIGURED");
   }
 
   const page = parsePage(params.page);
@@ -67,41 +71,10 @@ export async function searchDoctors(
   });
 
   if (error) {
-    // Fallback sem RPC (migration 004 ainda não aplicada)
-    const fallback = await supabase
-      .from("doctors")
-      .select("*", { count: "exact" })
-      .eq("is_deleted", false)
-      .order("updated_at", { ascending: false })
-      .range((page - 1) * pageSize, page * pageSize - 1);
-
-    if (fallback.error) {
-      return mapSupabaseError(error, "Não foi possível carregar os médicos.");
-    }
-
-    const rows = ((fallback.data ?? []) as Doctor[]).map((d) => ({
-      ...d,
-      validation_status: (d as Doctor & { validation_status?: ValidationStatus })
-        .validation_status ?? "nao_iniciada",
-      primary_crm: null,
-      primary_crm_uf: null,
-      primary_rqe: null,
-      primary_specialty: null,
-      primary_facility: null,
-      links_count: 0,
-      has_contact: false,
-      total_count: fallback.count ?? 0,
-      archived_at: null,
-      archived_by: null,
-      archive_reason: null,
-    })) as DoctorSearchRow[];
-
-    return ok({
-      rows,
-      total: fallback.count ?? 0,
-      page,
-      pageSize,
-    });
+    return mapSupabaseError(
+      error,
+      "Não foi possível carregar os médicos. Verifique se a migration 004 foi aplicada.",
+    );
   }
 
   const rows = (data ?? []) as DoctorSearchRow[];
@@ -112,9 +85,7 @@ export async function searchDoctors(
 export async function getDoctorById(
   id: string,
 ): Promise<ServiceResult<Doctor>> {
-  if (!hasSupabaseEnv()) {
-    return fail("Supabase não configurado.");
-  }
+  if (!hasSupabaseEnv()) return fail(UNCONFIGURED, "UNCONFIGURED");
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("doctors")
@@ -130,6 +101,7 @@ export async function getDoctorById(
 export async function getDoctorRegistrations(
   doctorId: string,
 ): Promise<ServiceResult<MedicalRegistration[]>> {
+  if (!hasSupabaseEnv()) return fail(UNCONFIGURED, "UNCONFIGURED");
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("medical_registrations")
@@ -149,6 +121,7 @@ export async function getDoctorSpecialties(
 ): Promise<
   ServiceResult<(DoctorSpecialty & { specialties: { name: string } | null })[]>
 > {
+  if (!hasSupabaseEnv()) return fail(UNCONFIGURED, "UNCONFIGURED");
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("doctor_specialties")
@@ -165,19 +138,25 @@ export async function getDoctorSpecialties(
 
 export async function explainConfidence(
   doctorId: string,
-): Promise<ServiceResult<ConfidenceExplanation | null>> {
+): Promise<ServiceResult<ConfidenceExplanation>> {
+  if (!hasSupabaseEnv()) return fail(UNCONFIGURED, "UNCONFIGURED");
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("explain_doctor_confidence", {
     p_doctor_id: doctorId,
   });
-  if (error) return ok(null);
+  if (error) {
+    return mapSupabaseError(
+      error,
+      "Não foi possível calcular a confiança. Verifique a migration 004.",
+    );
+  }
   return ok(data as ConfidenceExplanation);
 }
 
-export async function listSpecialties() {
-  if (!hasSupabaseEnv()) return ok([]);
+export async function listSpecialties(): Promise<ServiceResult<Specialty[]>> {
+  if (!hasSupabaseEnv()) return fail(UNCONFIGURED, "UNCONFIGURED");
   const supabase = await createClient();
   const { data, error } = await supabase.from("specialties").select("*").order("name");
   if (error) return mapSupabaseError(error, "Não foi possível carregar especialidades.");
-  return ok(data ?? []);
+  return ok((data ?? []) as Specialty[]);
 }

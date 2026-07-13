@@ -1,17 +1,48 @@
 import Link from "next/link";
 import { StatCard } from "@/components/stat-card";
-import { PageHeader, EmptyState, ButtonLink } from "@/components/ui/page";
+import {
+  PageHeader,
+  EmptyState,
+  ErrorState,
+  ButtonLink,
+} from "@/components/ui/page";
 import { getDashboardStats, getRecentAudit } from "@/services/dashboard/queries";
 import { getCurrentProfile } from "@/lib/data";
 import { canWrite } from "@/lib/permissions";
+import type { DashboardStats } from "@/types/database";
 
 export default async function DashboardPage() {
-  const [stats, auditResult, profile] = await Promise.all([
+  const [statsResult, auditResult, profile] = await Promise.all([
     getDashboardStats(),
     getRecentAudit(8),
     getCurrentProfile(),
   ]);
   const writable = canWrite(profile?.role);
+
+  if (!statsResult.success) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Dashboard" breadcrumbs={[{ label: "Dashboard" }]} />
+        <ErrorState message={statsResult.error.message} />
+        {statsResult.error.code === "UNCONFIGURED" ? (
+          <p className="text-sm text-[var(--muted)]">
+            Crie <code>web/.env.local</code> a partir de <code>web/.env.example</code>{" "}
+            e abra o{" "}
+            <Link href="/configuracoes/diagnostico" className="text-[var(--accent)] hover:underline">
+              diagnóstico
+            </Link>{" "}
+            (Master).
+          </p>
+        ) : (
+          <form>
+            <ButtonLink href="/dashboard">Tentar novamente</ButtonLink>
+          </form>
+        )}
+      </div>
+    );
+  }
+
+  const stats: DashboardStats = statsResult.data;
   const empty = stats.totalMedicos === 0 && stats.estabelecimentosAtivos === 0;
 
   return (
@@ -35,7 +66,7 @@ export default async function DashboardPage() {
       {empty ? (
         <EmptyState
           title="Base ainda vazia"
-          description="Comece cadastrando um estabelecimento com hemodinâmica e depois os médicos candidatos."
+          description="O banco está conectado e sem registros. Cadastre um estabelecimento com hemodinâmica e depois os médicos candidatos."
           action={
             writable ? (
               <div className="flex gap-2">
@@ -86,7 +117,9 @@ export default async function DashboardPage() {
               </Link>
             ) : null}
           </div>
-          {!auditResult.success || auditResult.data.length === 0 ? (
+          {!auditResult.success ? (
+            <p className="mt-3 text-sm text-rose-800">{auditResult.error.message}</p>
+          ) : auditResult.data.length === 0 ? (
             <p className="mt-3 text-sm text-[var(--muted)]">Nenhuma atividade registrada.</p>
           ) : (
             <ul className="mt-3 divide-y divide-[var(--border)]">
