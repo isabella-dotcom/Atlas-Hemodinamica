@@ -31,9 +31,11 @@ export type DiagnosticReport = {
     write_audit_log: CheckStatus;
     diagnostic_foundation_check: CheckStatus;
     diagnostic_phase_ac_check: CheckStatus;
+    diagnostic_ingestion_check: CheckStatus;
   };
   schemaPhaseAc: CheckStatus;
   schemaDetails: Record<string, unknown> | null;
+  ingestion: Record<string, unknown> | null;
   demoCounts: { doctors: number | null; facilities: number | null };
   foundation: Record<string, unknown> | null;
   expectedMigrations: readonly string[];
@@ -78,9 +80,11 @@ export async function runFoundationDiagnostic(): Promise<DiagnosticReport> {
       write_audit_log: "unknown",
       diagnostic_foundation_check: "unknown",
       diagnostic_phase_ac_check: "unknown",
+      diagnostic_ingestion_check: "unknown",
     },
     schemaPhaseAc: "unknown",
     schemaDetails: null,
+    ingestion: null,
     demoCounts: { doctors: null, facilities: null },
     foundation: null,
     expectedMigrations: EXPECTED_MIGRATIONS,
@@ -256,9 +260,28 @@ export async function runFoundationDiagnostic(): Promise<DiagnosticReport> {
         report.rpcs.diagnostic_phase_ac_check = "ok";
         report.schemaDetails = phaseAc as Record<string, unknown>;
       }
+
+      const { data: ingestionDiag, error: ingestionError } = await supabase.rpc(
+        "diagnostic_ingestion_check",
+      );
+      if (ingestionError) {
+        report.rpcs.diagnostic_ingestion_check = "fail";
+        notes.push("RPC diagnostic_ingestion_check indisponível (migrations 013–017).");
+        guidance.push(
+          "Aplique 012 (se pendente) e 013→017. Worker GitHub precisa de SUPABASE_URL + SERVICE_ROLE.",
+        );
+      } else {
+        report.rpcs.diagnostic_ingestion_check = "ok";
+        report.ingestion = ingestionDiag as Record<string, unknown>;
+        const queued = (ingestionDiag as { queued_jobs?: number })?.queued_jobs ?? 0;
+        if (queued > 0) {
+          notes.push(`${queued} job(s) na fila — configure GitHub Actions secrets se ainda não.`);
+        }
+      }
     } else {
       report.rpcs.diagnostic_foundation_check = "forbidden";
       report.rpcs.diagnostic_phase_ac_check = "forbidden";
+      report.rpcs.diagnostic_ingestion_check = "forbidden";
       report.rpcs.write_audit_log = "unknown";
     }
   } catch {

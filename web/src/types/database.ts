@@ -142,6 +142,10 @@ export interface Doctor {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  primary_source_code?: string | null;
+  source_competence?: string | null;
+  last_synced_at?: string | null;
+  auto_extracted?: boolean;
 }
 
 export interface DoctorSearchRow {
@@ -269,6 +273,10 @@ export interface HealthFacility {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  primary_source_code?: string | null;
+  source_competence?: string | null;
+  last_synced_at?: string | null;
+  auto_extracted?: boolean;
 }
 
 export interface DoctorFacilityLink {
@@ -479,6 +487,10 @@ export interface DashboardStats {
   vinculosSemValidacaoRecente: number;
   hemoSemMedicos: number;
   porEstado: { state_uf: string; total: number }[];
+  ingestionQueued: number;
+  ingestionRunning: number;
+  ingestionFailed: number;
+  lastIngestionCompetence: string | null;
 }
 
 export interface ConfidenceExplanation {

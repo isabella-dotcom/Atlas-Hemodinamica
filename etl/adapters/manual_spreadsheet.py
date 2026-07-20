@@ -1,0 +1,1 @@
+# Manual spreadsheet channel

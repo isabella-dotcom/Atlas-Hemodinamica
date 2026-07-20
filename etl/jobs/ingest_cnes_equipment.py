@@ -1,0 +1,1 @@
+from atlas_etl.pipeline import IngestionPipeline

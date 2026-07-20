@@ -87,6 +87,14 @@ export default async function DashboardPage() {
         <StatCard label="Parcialmente validados" value={stats.parcialmenteValidados} />
         <StatCard label="Validados" value={stats.validados} />
         <StatCard label="Especialistas confirmados" value={stats.especialistasConfirmados} />
+        <StatCard label="Jobs na fila" value={stats.ingestionQueued} />
+        <StatCard label="Jobs em andamento" value={stats.ingestionRunning} />
+        <StatCard label="Jobs com erro" value={stats.ingestionFailed} />
+        <StatCard
+          label="Última competência CNES"
+          value={stats.lastIngestionCompetence ? 1 : 0}
+          hint={stats.lastIngestionCompetence || "nenhuma"}
+        />
         <StatCard label="Estabelecimentos ativos" value={stats.estabelecimentosAtivos} />
         <StatCard label="Com hemodinâmica" value={stats.estabelecimentosHemo} />
         <StatCard label="Vínculos ativos" value={stats.vinculosAtivos} />

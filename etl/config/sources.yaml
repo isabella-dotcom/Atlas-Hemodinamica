@@ -1,0 +1,103 @@
+# Catálogo configurável de fontes oficiais — URLs centralizadas (não hardcoded no código).
+# Atualize discovery_url / base_url conforme portais oficiais mudarem.
+
+sources:
+  - code: CNES
+    name: CNES/DATASUS
+    organization: Ministério da Saúde / DATASUS
+    base_url: "https://ftp.datasus.gov.br/cnes/"
+    discovery_url: "https://datasus.saude.gov.br/transferencia-de-arquivos/"
+    ftp_base: "ftp://ftp.datasus.gov.br/cnes/"
+    source_type: official_file
+    enabled: true
+    update_frequency: monthly
+    allowed_states: ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"]
+    expected_formats: ["zip", "dbc", "dbf", "csv"]
+    modalities:
+      - code: ESTABELECIMENTOS
+        file_prefix: "tbEstabelecimento"
+        description: "Estabelecimentos de saúde"
+      - code: PROFISSIONAIS
+        file_prefix: "tbDadosProfissionalSus"
+        description: "Profissionais SUS"
+      - code: VINCULOS
+        file_prefix: "rlEstabEquipeProf"
+        description: "Vínculos profissional-estabelecimento (quando disponível)"
+      - code: SERVICOS
+        file_prefix: "rlEstabServClass"
+        description: "Serviços especializados / classificações"
+      - code: EQUIPAMENTOS
+        file_prefix: "rlEstabEquip"
+        description: "Equipamentos"
+      - code: CBO
+        file_prefix: "tbCbo"
+        description: "Tabela CBO"
+    notes: >
+      Arquivos oficiais do CNES. Preferir FTP DATASUS.
+      Fallback: URL oficial informada pelo usuário no job (parameters.fallback_url).
+      Não coletar CPF/CNS/dados de pacientes.
+
+  - code: OPENDATASUS
+    name: OpenDataSUS
+    organization: Ministério da Saúde
+    base_url: "https://opendatasus.saude.gov.br/"
+    discovery_url: "https://opendatasus.saude.gov.br/"
+    source_type: open_data_portal
+    enabled: true
+    update_frequency: as_available
+    allowed_states: []
+    expected_formats: ["csv", "json", "zip"]
+    notes: Portal de dados abertos — usar datasets oficiais publicados.
+
+  - code: SIA_SUS
+    name: SIA/SUS
+    organization: DATASUS
+    base_url: "https://ftp.datasus.gov.br/dissemin/publicos/SIASUS/"
+    discovery_url: "https://datasus.saude.gov.br/transferencia-de-arquivos/"
+    source_type: production_assistencial
+    enabled: false
+    update_frequency: monthly
+    allowed_states: []
+    expected_formats: ["dbc", "zip"]
+    notes: >
+      DESATIVADO por padrão. Requer dicionário de procedimentos cardiovasculares
+      e estimativa de custo de processamento documentados antes de habilitar.
+
+  - code: SIH_SUS
+    name: SIH/SUS
+    organization: DATASUS
+    base_url: "https://ftp.datasus.gov.br/dissemin/publicos/SIHSUS/"
+    discovery_url: "https://datasus.saude.gov.br/transferencia-de-arquivos/"
+    source_type: production_assistencial
+    enabled: false
+    update_frequency: monthly
+    allowed_states: []
+    expected_formats: ["dbc", "zip"]
+    notes: DESATIVADO por padrão — mesma restrição do SIA/SUS.
+
+  - code: INSTITUTIONAL
+    name: Fontes institucionais
+    organization: Variada
+    base_url: ""
+    discovery_url: ""
+    source_type: institutional
+    enabled: false
+    update_frequency: manual
+    allowed_states: []
+    expected_formats: ["html", "pdf"]
+    notes: >
+      Sites de hospitais, clínicas, SBHCI, Lattes, congressos.
+      Coleta automática SOMENTE com allowlist em parameters.allowlist_domains.
+      Sem allowlist = sem coleta.
+
+  - code: IMPORT_CSV
+    name: Planilha manual
+    organization: Equipe Atlas
+    base_url: ""
+    discovery_url: ""
+    source_type: manual_spreadsheet
+    enabled: true
+    update_frequency: on_demand
+    allowed_states: []
+    expected_formats: ["csv", "xlsx"]
+    notes: Canal auxiliar via /importacoes (já existente na app Next.js).

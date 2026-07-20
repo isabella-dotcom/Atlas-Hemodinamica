@@ -28,7 +28,8 @@ Papéis no banco (`app_role`): `master`, `analista`, `visualizador`.
    - `009_facilities_enrichment.sql`
    - `010_links_contacts_enrichment.sql`
    - `011_ensure_phase_ac_schema.sql` (rede de segurança idempotente)
-   - `012_import_workflow_enrichment.sql` (fluxo de importação RAW → candidato)
+   - `012_import_workflow_enrichment.sql` (importação manual RAW → candidato)
+   - `013_ingestion_jobs.sql` … `017_ingestion_rls_and_rpcs.sql` (ingestão automática)
 3. Confirmar buckets privados `imports` e `evidences`.
 4. Criar usuários **somente no Auth** (sem cadastro público na app):
    - Master, Analista, Visualizador (e-mails de teste do proprietário).
@@ -80,7 +81,17 @@ select public.normalize_search_text('José da Silva');
 select public.diagnostic_foundation_check(); -- somente Master
 ```
 
-## Importação de dados reais
+## Ingestão automática (CNES)
+
+Canal principal: fontes oficiais → worker Python (GitHub Actions) → candidatos → `/validacao`.
+
+- Docs: [arquitetura](docs/arquitetura-ingestao-automatica.md), [operação](docs/operacao-ingestao.md), [GitHub Actions](docs/github-actions.md)
+- UI: `/importacoes`, `/importacoes/jobs`, `/importacoes/fontes`
+- Migrations: `012` (manual import) + `013`–`017` (jobs/overrides)
+- Secrets GitHub: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- Planilha CSV/XLSX permanece como canal **auxiliar**
+
+## Importação de dados reais (planilha auxiliar)
 
 Fluxo completo em `/importacoes` (Master/Analista):
 

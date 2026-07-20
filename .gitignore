@@ -34,6 +34,8 @@ build/
 /data/
 /imports/
 /uploads/
+etl/.etl-work/
+etl/.venv/
 *.csv
 *.xlsx
 *.xls
@@ -42,6 +44,8 @@ build/
 *.sqlite
 *.sqlite3
 !etl/samples/.gitkeep
+!etl/tests/fixtures/
+!etl/tests/fixtures/**
 # Exceções: templates e fixtures fictícios
 !web/public/templates/
 !web/public/templates/**

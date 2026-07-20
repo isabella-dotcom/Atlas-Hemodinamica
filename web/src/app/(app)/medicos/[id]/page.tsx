@@ -20,6 +20,8 @@ import {
 } from "@/services/doctors/queries";
 import { createClient } from "@/lib/supabase/server";
 import { DoctorActionsPanel, RemoveSpecialtyButton } from "./doctor-actions-panel";
+import { AssistedCrmConsultation } from "@/components/assisted-crm-consultation";
+import { SourceProvenancePanel } from "@/components/source-provenance-panel";
 import type {
   DoctorFacilityLink,
   Evidence,
@@ -71,6 +73,8 @@ export default async function MedicoDetalhePage({
     auditRes,
     facilitiesRes,
     sourcesRes,
+    observationsRes,
+    overridesRes,
   ] = await Promise.all([
     getDoctorRegistrations(id),
     getDoctorSpecialties(id),
@@ -106,6 +110,24 @@ export default async function MedicoDetalhePage({
       .order("name")
       .limit(300),
     supabase.from("data_sources").select("id, name").eq("is_active", true).order("name"),
+    writable
+      ? supabase
+          .from("source_observations")
+          .select("id, field_name, observed_value, competence, observed_at, confidence_score")
+          .eq("entity_type", "doctor")
+          .eq("entity_id", id)
+          .eq("is_current", true)
+          .order("observed_at", { ascending: false })
+          .limit(20)
+      : Promise.resolve({ data: [], error: null }),
+    writable
+      ? supabase
+          .from("manual_field_overrides")
+          .select("id, field_name, override_value, reason, overridden_at")
+          .eq("entity_type", "doctor")
+          .eq("entity_id", id)
+          .eq("is_active", true)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   const relatedError =
@@ -115,6 +137,7 @@ export default async function MedicoDetalhePage({
     auditRes.error ||
     facilitiesRes.error ||
     sourcesRes.error;
+  // observations/overrides podem falhar se migrations 015–016 ainda não aplicadas
   if (relatedError) {
     return (
       <ErrorState message="Não foi possível carregar dados relacionados do médico. Tente novamente." />
@@ -178,6 +201,11 @@ export default async function MedicoDetalhePage({
             DADO FICTÍCIO
           </span>
         ) : null}
+        {doctor.auto_extracted ? (
+          <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-800">
+            Extraído automaticamente
+          </span>
+        ) : null}
         {doctor.last_validated_at ? (
           <span className="text-xs text-[var(--muted)]">
             Última validação:{" "}
@@ -185,6 +213,35 @@ export default async function MedicoDetalhePage({
           </span>
         ) : null}
       </div>
+
+      {writable ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SourceProvenancePanel
+            entityType="doctor"
+            entityId={doctor.id}
+            autoExtracted={doctor.auto_extracted}
+            primarySourceCode={doctor.primary_source_code}
+            sourceCompetence={doctor.source_competence}
+            lastSyncedAt={doctor.last_synced_at}
+            observations={(observationsRes.data ?? []) as Array<{
+              id: string;
+              field_name: string;
+              observed_value: unknown;
+              competence: string | null;
+              observed_at: string;
+              confidence_score: number;
+            }>}
+            overrides={(overridesRes.data ?? []) as Array<{
+              id: string;
+              field_name: string;
+              override_value: unknown;
+              reason: string;
+              overridden_at: string;
+            }>}
+          />
+          <AssistedCrmConsultation doctorId={doctor.id} />
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-2">
         {tabs.map((item) => (

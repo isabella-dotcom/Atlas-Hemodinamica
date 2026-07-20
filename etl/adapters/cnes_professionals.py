@@ -1,0 +1,1 @@
+from atlas_etl.normalizers import doctors_from_rows

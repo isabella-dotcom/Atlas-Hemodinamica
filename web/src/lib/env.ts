@@ -73,6 +73,11 @@ export const EXPECTED_MIGRATIONS = [
   "010_links_contacts_enrichment.sql",
   "011_ensure_phase_ac_schema.sql",
   "012_import_workflow_enrichment.sql",
+  "013_ingestion_jobs.sql",
+  "014_source_files_and_normalized_records.sql",
+  "015_matching_and_source_observations.sql",
+  "016_manual_overrides.sql",
+  "017_ingestion_rls_and_rpcs.sql",
 ] as const;
 
 export const APP_VERSION = "0.1.0";

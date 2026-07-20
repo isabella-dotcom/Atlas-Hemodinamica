@@ -1,0 +1,1 @@
+from atlas_etl.discovery import discover_cnes_files

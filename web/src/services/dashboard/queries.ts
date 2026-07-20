@@ -130,6 +130,41 @@ export async function getDashboardStats(): Promise<ServiceResult<DashboardStats>
       stateMap.set(uf, (stateMap.get(uf) ?? 0) + 1);
     }
 
+    let ingestionQueued = 0;
+    let ingestionRunning = 0;
+    let ingestionFailed = 0;
+    let lastIngestionCompetence: string | null = null;
+    try {
+      const [q, r, f, sync] = await Promise.all([
+        supabase
+          .from("ingestion_jobs")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "queued"),
+        supabase
+          .from("ingestion_jobs")
+          .select("id", { count: "exact", head: true })
+          .not("status", "in", '("queued","completed","failed","cancelled","partial")'),
+        supabase
+          .from("ingestion_jobs")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "failed"),
+        supabase
+          .from("sync_states")
+          .select("last_processed_competence")
+          .eq("source_code", "CNES")
+          .order("updated_at", { ascending: false })
+          .limit(1),
+      ]);
+      ingestionQueued = q.count ?? 0;
+      ingestionRunning = r.count ?? 0;
+      ingestionFailed = f.count ?? 0;
+      lastIngestionCompetence =
+        (sync.data?.[0] as { last_processed_competence?: string } | undefined)
+          ?.last_processed_competence ?? null;
+    } catch {
+      // migrations 013+ ainda não aplicadas
+    }
+
     return ok({
       totalMedicos: total.count ?? 0,
       candidatos: candidatos.count ?? 0,
@@ -152,6 +187,10 @@ export async function getDashboardStats(): Promise<ServiceResult<DashboardStats>
       porEstado: Array.from(stateMap.entries())
         .map(([state_uf, totalCount]) => ({ state_uf, total: totalCount }))
         .sort((a, b) => b.total - a.total),
+      ingestionQueued,
+      ingestionRunning,
+      ingestionFailed,
+      lastIngestionCompetence,
     });
   } catch {
     return fail(

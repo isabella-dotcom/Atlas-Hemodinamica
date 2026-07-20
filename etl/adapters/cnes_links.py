@@ -1,0 +1,1 @@
+from atlas_etl.normalizers import normalize_link_row

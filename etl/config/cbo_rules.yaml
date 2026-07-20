@@ -1,0 +1,27 @@
+# CBO relevantes para cardiologia / hemodinâmica
+# Fonte: Classificação Brasileira de Ocupações (MTE) — códigos oficiais.
+# Validar presença na tbCbo da competência CNES antes de produção.
+
+version: "2026.1"
+cardiology_related:
+  - code: "225120"
+    description: "Médico cardiologista"
+    hemodynamics_weight: high
+  - code: "225125"
+    description: "Médico hemodinamicista"
+    hemodynamics_weight: high
+    notes: "Confirmar se o código está na tabela CBO da competência; se ausente, não pontuar"
+  - code: "225185"
+    description: "Médico angiologista"
+    hemodynamics_weight: medium
+  - code: "225210"
+    description: "Médico cirurgião cardiovascular"
+    hemodynamics_weight: medium
+  - code: "225103"
+    description: "Médico acupunturista"
+    hemodynamics_weight: none
+    include: false
+
+never_infer_rqe: true
+never_collect_cpf: true
+never_collect_cns: true

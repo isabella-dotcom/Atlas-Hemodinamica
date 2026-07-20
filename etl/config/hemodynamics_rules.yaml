@@ -1,0 +1,97 @@
+# Regras explicáveis de identificação de hemodinâmica / cardiologia intervencionista.
+# version: altere ao mudar códigos — documentado em docs/regras-hemodinamica.md
+# IMPORTANTE: códigos abaixo são placeholders documentados a partir de dicionários
+# públicos conhecidos. Antes da produção, validar contra o dicionário da competência
+# CNES em uso. NÃO inventar códigos; NÃO inferir RQE; NÃO marcar especialista_confirmado.
+
+version: "2026.1"
+max_auto_classification: atuacao_provavel
+# Classificações que NUNCA são aplicadas automaticamente:
+# - atuacao_institucional_confirmada
+# - especialista_confirmado
+
+rules:
+  # Equipamentos — códigos CNES de equipamento (tbEquipamento / rlEstabEquip)
+  # Referência documental: dicionário CNES — equipamento de hemodinâmica / angiógrafo
+  # Códigos devem ser confirmados no arquivo tbTipoEquipamento da competência.
+  - id: equip_hemodinamica
+    signal: equipment
+    codes: []  # preencher após validação do dicionário da competência (ver docs/cnes.md)
+    code_hints:
+      - "equipamento de hemodinâmica"
+      - "angiógrafo"
+      - "sala de hemodinâmica"
+    points: 35
+    justification: "Equipamento compatível com hemodinâmica no CNES"
+
+  - id: service_cardiologia_intervencionista
+    signal: specialized_service
+    codes: []  # preencher com códigos de serviço/classificação oficiais após dicionário
+    code_hints:
+      - "cardiologia"
+      - "hemodinâmica"
+      - "cirurgia cardiovascular"
+    points: 30
+    justification: "Serviço especializado compatível"
+
+  # CBO — Classificação Brasileira de Ocupações (ocupações médicas cardiológicas)
+  # Códigos oficiais CBO 2002 (família 2251 Médicos clínicos — exemplos documentados):
+  - id: cbo_cardiologista
+    signal: cbo
+    codes:
+      - "225120"  # Médico cardiologista (CBO oficial)
+      - "225125"  # Médico hemodinamicista (quando presente na tabela CBO utilizada)
+      - "225185"  # Médico angiologista (relacionado — peso menor via points)
+    points: 25
+    justification: "CBO médico relacionado à cardiologia/hemodinâmica"
+
+  - id: cbo_cirurgiao_cardiovascular
+    signal: cbo
+    codes:
+      - "225210"  # Médico cirurgião cardiovascular (CBO oficial)
+    points: 20
+    justification: "CBO cirurgia cardiovascular"
+
+  - id: name_sector_hemo
+    signal: sector_name
+    patterns:
+      - "(?i)hemodin[aâ]mica"
+      - "(?i)cardiologia\\s+intervencionista"
+      - "(?i)cateterismo"
+    points: 15
+    justification: "Nome de setor/serviço sugere hemodinâmica"
+
+  - id: facility_type_hospital
+    signal: facility_type
+    patterns:
+      - "(?i)hospital"
+    points: 5
+    justification: "Tipo estabelecimento hospitalar (sinal fraco)"
+
+  - id: has_medical_links
+    signal: professional_links
+    min_doctors: 1
+    points: 10
+    justification: "Possui profissionais médicos vinculados no CNES"
+
+  - id: already_validated
+    signal: prior_validation
+    points: 40
+    justification: "Estabelecimento já validado na base oficial Atlas"
+
+  - id: institutional_evidence
+    signal: evidence
+    points: 20
+    justification: "Evidência institucional registrada"
+
+thresholds:
+  possivel_candidato: 25
+  atuacao_provavel: 55
+  # Acima disso ainda permanece candidato até revisão humana
+  review_required_above: 70
+
+forbidden_auto_actions:
+  - set_especialista_confirmado
+  - infer_rqe
+  - promote_to_oficial
+  - merge_by_name_only

@@ -1,0 +1,1 @@
+from atlas_etl.pipeline import process_queued_jobs

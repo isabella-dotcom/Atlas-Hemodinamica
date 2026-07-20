@@ -1,0 +1,51 @@
+name: CNES Ingestion (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      state_uf:
+        description: "UF (ex: MG)"
+        required: true
+        default: "MG"
+      competence:
+        description: "Competência AAAAMM ou AAAA-MM"
+        required: false
+        default: ""
+      job_id:
+        description: "UUID do job (opcional — se vazio processa fila)"
+        required: false
+        default: ""
+      fallback_url:
+        description: "URL oficial de fallback"
+        required: false
+        default: ""
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: etl/requirements.txt
+
+      - name: Install dependencies
+        working-directory: etl
+        run: pip install -r requirements.txt
+
+      - name: Process job or queue
+        working-directory: etl
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.job_id }}" ]; then
+            python cli.py run-job --job-id "${{ inputs.job_id }}" --workdir ./.etl-work
+          else
+            python cli.py process-queue --limit 5 --workdir ./.etl-work
+          fi

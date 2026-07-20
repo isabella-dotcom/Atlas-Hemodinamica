@@ -1,0 +1,1 @@
+from atlas_etl.normalizers import facilities_from_rows

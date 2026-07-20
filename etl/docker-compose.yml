@@ -1,0 +1,13 @@
+services:
+  atlas-etl:
+    build: .
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      LOG_LEVEL: INFO
+    volumes:
+      - etl-work:/data/etl-work
+    command: ["python", "cli.py", "process-queue", "--limit", "5", "--workdir", "/data/etl-work"]
+
+volumes:
+  etl-work:
