@@ -22,6 +22,8 @@ const classificationTone: Record<DoctorClassification, string> = {
   especialista_confirmado: "bg-emerald-50 text-emerald-900 border-emerald-200",
   rejeitado: "bg-rose-50 text-rose-900 border-rose-200",
   inativo: "bg-slate-100 text-slate-700 border-slate-200",
+  falecido: "bg-stone-100 text-stone-800 border-stone-300",
+  registro_duplicado: "bg-orange-50 text-orange-900 border-orange-200",
 };
 
 export function ClassificationBadge({ value }: { value: DoctorClassification }) {

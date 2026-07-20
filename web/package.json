@@ -9,7 +9,9 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "seed:demo": "node ../scripts/seed-demo.mjs apply",
+    "seed:demo:clear": "node ../scripts/seed-demo.mjs clear"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

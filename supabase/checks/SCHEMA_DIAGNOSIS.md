@@ -1,0 +1,27 @@
+-- SCHEMA_DIAGNOSIS.md (gerado para a tarefa de colunas ausentes)
+--
+-- VEREDITO
+-- As consultas information_schema retornaram 0 linhas porque as migrations
+-- 007–010 existiam apenas no working tree local (untracked) e NÃO foram
+-- aplicadas no projeto Supabase conectado à Vercel.
+--
+-- Não há evidência de ALTER TABLE incorreto nas 007–010: os ADD COLUMN
+-- IF NOT EXISTS estão presentes. O gap é de aplicação, não de definição.
+--
+-- COLUNAS PREVISTAS vs CRIADAS PELAS MIGRATIONS (no repositório)
+-- doctors: social_name, biography, declared/confirmed_practice_area,
+--   formação, is_sbhci_member, lattes_url, orcid, is_demo, deleted_at → 007/011
+-- medical_registrations: inscription_type, consulted_at, verification_* → 008/011
+-- health_facilities: normalized_name, legal_nature, has_catheterization_lab,
+--   is_demo (+ demais flags) → 009/011
+--   Endereço: address_zip/street/district (001), NÃO postal_code/street/neighborhood
+-- doctor_facility_links: function_title, is_team_leader, weekly_hours → 010/011
+-- professional_contacts: contact_status, accepts_contact, collected_at → 010/011
+--
+-- COLUNAS AUSENTES NO BANCO REMOTO (até aplicar 007–011): todas as listadas
+-- na consulta do usuário.
+--
+-- CORREÇÃO: aplicar 007→011; 011 é rede de segurança idempotente.
+--
+-- RISCOS: app tipada espera colunas novas; sem migration, PostgREST falha em
+-- select/update desses campos. Seed exige 007–011.

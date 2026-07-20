@@ -6,7 +6,9 @@ export type DoctorClassification =
   | "atuacao_institucional_confirmada"
   | "especialista_confirmado"
   | "rejeitado"
-  | "inativo";
+  | "inativo"
+  | "falecido"
+  | "registro_duplicado";
 
 export type ValidationStatus =
   | "nao_iniciada"
@@ -24,6 +26,13 @@ export type CrmStatus =
   | "suspenso"
   | "cancelado"
   | "desconhecido";
+
+export type RegistrationVerificationStatus =
+  | "nao_verificado"
+  | "em_verificacao"
+  | "verificado"
+  | "divergente"
+  | "invalido";
 
 export type LinkStatus = "ativo" | "encerrado" | "provisorio" | "desconhecido";
 
@@ -45,9 +54,19 @@ export type ImportStatus =
 export type ContactChannel =
   | "email"
   | "telefone"
+  | "celular"
   | "whatsapp"
   | "site"
+  | "secretaria"
+  | "formulario"
+  | "linkedin"
   | "outro";
+
+export type ContactStatus =
+  | "nao_validado"
+  | "valido"
+  | "invalido"
+  | "desatualizado";
 
 export type EvidenceEntity =
   | "doctor"
@@ -64,6 +83,10 @@ export type EvidenceStatus =
   | "expirada"
   | "necessita_revisao";
 
+export type OwnershipType = "publico" | "privado" | "filantropico" | "misto";
+export type BranchType = "matriz" | "filial" | "unico";
+export type SexCode = "F" | "M" | "X" | "NI";
+
 export interface UsersProfile {
   id: string;
   full_name: string;
@@ -78,6 +101,53 @@ export interface Doctor {
   id: string;
   full_name: string;
   normalized_name: string;
+  social_name: string | null;
+  sex: SexCode | null;
+  /** Carregado apenas para master/analista (tabela doctor_sensitive_fields). */
+  birth_date: string | null;
+  nationality: string | null;
+  photo_path: string | null;
+  biography: string | null;
+  classification: DoctorClassification;
+  validation_status: ValidationStatus;
+  layer: RecordLayer;
+  confidence_score: number;
+  city: string | null;
+  state_uf: string | null;
+  notes: string | null;
+  declared_practice_area: string | null;
+  confirmed_practice_area: string | null;
+  practice_keywords: string[];
+  graduation_institution: string | null;
+  graduation_year: number | null;
+  residency: string | null;
+  specialization: string | null;
+  fellowships: string[];
+  masters_degree: string | null;
+  doctorate_degree: string | null;
+  professional_titles: string[];
+  medical_societies: string[];
+  is_sbhci_member: boolean | null;
+  lattes_url: string | null;
+  orcid: string | null;
+  scientific_identifiers: Record<string, unknown>;
+  is_demo: boolean;
+  last_validated_at: string | null;
+  last_validated_by: string | null;
+  is_deleted: boolean;
+  deleted_at: string | null;
+  archived_at: string | null;
+  archived_by: string | null;
+  archive_reason: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DoctorSearchRow {
+  id: string;
+  full_name: string;
+  normalized_name: string;
   classification: DoctorClassification;
   validation_status: ValidationStatus;
   layer: RecordLayer;
@@ -88,15 +158,8 @@ export interface Doctor {
   last_validated_at: string | null;
   last_validated_by: string | null;
   is_deleted: boolean;
-  archived_at: string | null;
-  archived_by: string | null;
-  archive_reason: string | null;
-  created_by: string | null;
   created_at: string;
   updated_at: string;
-}
-
-export interface DoctorSearchRow extends Doctor {
   primary_crm: string | null;
   primary_crm_uf: string | null;
   primary_rqe: string | null;
@@ -121,6 +184,13 @@ export interface MedicalRegistration {
   last_validated_by: string | null;
   notes: string | null;
   is_primary: boolean;
+  inscription_type: string | null;
+  consulted_at: string | null;
+  verified_at: string | null;
+  verification_status: RegistrationVerificationStatus;
+  registration_details: string | null;
+  rqe_area: string | null;
+  rqe_status: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -142,25 +212,54 @@ export interface HealthFacility {
   id: string;
   name: string;
   trade_name: string | null;
+  normalized_name: string | null;
   cnes: string | null;
   cnpj: string | null;
   facility_type: string | null;
+  legal_nature: string | null;
+  ownership_type: OwnershipType | null;
+  branch_type: BranchType | null;
+  is_active: boolean;
   city: string;
   state_uf: string;
   address_street: string | null;
   address_number: string | null;
+  address_complement: string | null;
   address_district: string | null;
   address_zip: string | null;
+  ibge_city_code: string | null;
+  region: string | null;
+  latitude: number | null;
+  longitude: number | null;
   phone: string | null;
   email: string | null;
   website: string | null;
+  hemodynamics_phone: string | null;
+  institutional_whatsapp: string | null;
+  hemodynamics_email: string | null;
+  secretary_contact: string | null;
+  service_manager_contact: string | null;
   attends_sus: boolean | null;
+  attends_private: boolean | null;
+  attends_insurance: boolean | null;
   has_hemodynamics: boolean;
+  has_catheterization_lab: boolean | null;
+  has_interventional_cardiology: boolean | null;
+  has_interventional_radiology: boolean | null;
+  has_interventional_neuroradiology: boolean | null;
+  is_24_hours: boolean | null;
+  has_emergency_service: boolean | null;
+  estimated_rooms: number | null;
+  estimated_equipment: number | null;
+  procedures: string | null;
+  service_notes: string | null;
+  last_service_confirmed_at: string | null;
   service_status: string | null;
   layer: RecordLayer;
   confidence_score: number;
   source_id: string | null;
   notes: string | null;
+  is_demo: boolean;
   last_validated_at: string | null;
   last_validated_by: string | null;
   is_deleted: boolean;
@@ -177,12 +276,19 @@ export interface DoctorFacilityLink {
   doctor_id: string;
   facility_id: string;
   role_title: string | null;
+  function_title: string | null;
   department: string | null;
+  practiced_specialty: string | null;
   relationship_type: string | null;
   is_coordinator: boolean;
+  is_team_leader: boolean;
   is_technical_responsible: boolean;
+  is_clinical_staff: boolean;
   coordinator_justification: string | null;
   coordinator_confirmed: boolean;
+  weekly_hours: number | null;
+  is_sus_link: boolean | null;
+  evidence_id: string | null;
   status: LinkStatus;
   started_on: string | null;
   ended_on: string | null;
@@ -190,6 +296,8 @@ export interface DoctorFacilityLink {
   confidence_score: number;
   last_validated_at: string | null;
   last_validated_by: string | null;
+  last_verified_at: string | null;
+  verified_by: string | null;
   notes: string | null;
   layer: RecordLayer;
   is_deleted: boolean;
@@ -208,6 +316,14 @@ export interface ProfessionalContact {
   is_publicly_available: boolean;
   is_primary: boolean;
   do_not_contact: boolean;
+  contact_status: ContactStatus;
+  accepts_contact: boolean | null;
+  source_origin: string | null;
+  collected_at: string | null;
+  last_attempt_at: string | null;
+  last_attempt_result: string | null;
+  verified_at: string | null;
+  verified_by: string | null;
   source_id: string | null;
   confidence_score: number;
   last_validated_at: string | null;
@@ -334,6 +450,8 @@ export const CLASSIFICATION_LABELS: Record<DoctorClassification, string> = {
   especialista_confirmado: "Especialista confirmado",
   rejeitado: "Rejeitado",
   inativo: "Inativo",
+  falecido: "Falecido",
+  registro_duplicado: "Registro duplicado",
 };
 
 export const VALIDATION_STATUS_LABELS: Record<ValidationStatus, string> = {
@@ -371,4 +489,30 @@ export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
   aprovado: "Aprovado",
   rejeitado: "Rejeitado",
   nova_revisao: "Nova revisão",
+};
+
+export const CONTACT_STATUS_LABELS: Record<ContactStatus, string> = {
+  nao_validado: "Não validado",
+  valido: "Válido",
+  invalido: "Inválido",
+  desatualizado: "Desatualizado",
+};
+
+export const CONTACT_CHANNEL_LABELS: Record<ContactChannel, string> = {
+  email: "E-mail",
+  telefone: "Telefone",
+  celular: "Celular",
+  whatsapp: "WhatsApp",
+  site: "Site",
+  secretaria: "Secretaria",
+  formulario: "Formulário",
+  linkedin: "LinkedIn",
+  outro: "Outro",
+};
+
+export const OWNERSHIP_TYPE_LABELS: Record<OwnershipType, string> = {
+  publico: "Público",
+  privado: "Privado",
+  filantropico: "Filantrópico",
+  misto: "Misto",
 };

@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  confidenceSchema,
+  emptyToNull,
+  optionalNullableText,
+  optionalUrlSchema,
+} from "@/lib/validation";
 
 export const evidenceSchema = z.object({
   entity_type: z.enum([
@@ -10,17 +16,21 @@ export const evidenceSchema = z.object({
     "specialty",
   ]),
   entity_id: z.string().uuid(),
-  source_id: z.string().uuid().optional().nullable(),
-  title: z.string().trim().min(3),
-  description: z.string().optional().nullable(),
-  url: z.string().url().optional().or(z.literal("")).nullable(),
-  collected_at: z.string().optional().nullable(),
-  confirmed_field: z.string().optional().nullable(),
-  captured_value: z.string().optional().nullable(),
-  reliability_score: z.coerce.number().int().min(0).max(100).optional().nullable(),
+  source_id: z.preprocess(
+    emptyToNull,
+    z.string().uuid().nullable().optional(),
+  ),
+  title: z.string().trim().min(3, "Informe o título"),
+  description: optionalNullableText,
+  url: optionalUrlSchema,
+  collected_at: z.preprocess(emptyToNull, z.string().nullable().optional()),
+  confirmed_field: optionalNullableText,
+  captured_value: optionalNullableText,
+  reliability_score: confidenceSchema.nullable().optional(),
   status: z
     .enum(["pendente", "aceita", "rejeitada", "expirada", "necessita_revisao"])
     .default("pendente"),
+  storage_path: optionalNullableText,
 });
 
 export type EvidenceInput = z.infer<typeof evidenceSchema>;

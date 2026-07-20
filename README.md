@@ -23,6 +23,11 @@ Papéis no banco (`app_role`): `master`, `analista`, `visualizador`.
    - `004_unified_doctor_search.sql`
    - `005_audit_and_integrity_improvements.sql`
    - `006_supabase_integration_fixes.sql`
+   - `007_doctor_profile_enrichment.sql`
+   - `008_registrations_and_specialties.sql`
+   - `009_facilities_enrichment.sql`
+   - `010_links_contacts_enrichment.sql`
+   - `011_ensure_phase_ac_schema.sql` (rede de segurança idempotente)
 3. Confirmar buckets privados `imports` e `evidences`.
 4. Criar usuários **somente no Auth** (sem cadastro público na app):
    - Master, Analista, Visualizador (e-mails de teste do proprietário).
@@ -91,19 +96,63 @@ Com Master, após `.env.local` válido:
 11. Confirmar auditoria
 12. Repetir leituras com Analista e Visualizador (URLs diretas)
 
-## Dados fictícios
+## Dados fictícios (seed de demonstração)
+
+**AVISO:** o seed é 100% fictício (`is_demo = true`, domínio `example.com`, textos “DADO FICTÍCIO”).  
+**Nunca** use como base oficial / GOLDEN. **Não** execute em produção sem revisão explícita.
+
+### Pré-requisito
+Migrations `007`–`011` aplicadas no projeto Supabase de homologação.
+
+### Popular
+
+```bash
+cd web
+npm run seed:demo
+# O comando valida e lista os arquivos. Em seguida, no SQL Editor:
+# 1) supabase/seed/001_demo_data.sql
+# 2) supabase/seed/002_demo_review_queue.sql
+```
+
+Conteúdo aproximado: 10 estabelecimentos MG, 30 médicos, CRM/RQE fictícios, vínculos, contatos, evidências e fila.
+
+### Limpar somente demo
+
+```bash
+cd web
+npm run seed:demo:clear
+# Depois execute no SQL Editor:
+# supabase/seed/999_clear_demo_data.sql
+```
+
+### Verificar colunas e integridade
+
+No SQL Editor, execute:
+
+```text
+supabase/checks/verify_phase_ac.sql
+```
+
+Ou, como Master na app: `/configuracoes/diagnostico` → Schema Fase A–C + RPC `diagnostic_phase_ac_check`.
+
+### Testar edição na interface
+
+1. Login Master/Analista
+2. Buscar “Médico Demonstração” ou “Hospital Demonstração”
+3. Abrir detalhe → Editar → alterar biografia/serviço → Salvar
+4. Confirmar toast de sucesso e dados persistidos após refresh
+5. Visualizador: apenas consulta; sem botão Editar; sem `birth_date`; contatos restritos ocultos
+
+## Dados fictícios (legado)
 
 ```sql
--- aplicar (revisão manual)
+-- seed antigo (menor)
 \i supabase/seed/validation_demo_data.sql
-
--- limpar somente demo
 \i supabase/seed/cleanup_validation_demo_data.sql
 ```
 
 - Prefixo `[DEMO-ATLAS]`
 - Domínio `example.com`
-- Telefones/CNES/CNPJ claramente fictícios
 - **Não** executar seed em produção sem revisão
 
 ## Testes por papel
@@ -171,6 +220,8 @@ npm run lint
 npm run typecheck
 npm run test
 npm run build
+npm run seed:demo        # lista SQL fictício (não aplica remoto)
+npm run seed:demo:clear  # lista SQL de limpeza
 # npm run test:e2e  # somente com env de teste
 
 cd ../etl

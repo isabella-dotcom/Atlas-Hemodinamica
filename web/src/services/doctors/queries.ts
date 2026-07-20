@@ -95,7 +95,30 @@ export async function getDoctorById(
 
   if (error) return mapSupabaseError(error, "Não foi possível carregar o médico.");
   if (!data) return fail("Médico não encontrado.", "NOT_FOUND");
-  return ok(data as Doctor);
+
+  const doctor = data as Doctor;
+  doctor.birth_date = null;
+
+  const { data: sensitive } = await supabase
+    .from("doctor_sensitive_fields")
+    .select("birth_date")
+    .eq("doctor_id", id)
+    .maybeSingle();
+
+  // RLS bloqueia visualizador: sensitive será null/erro silencioso
+  if (sensitive?.birth_date) {
+    doctor.birth_date = sensitive.birth_date;
+  }
+
+  // Defaults seguros para colunas novas ainda não migradas no ambiente
+  doctor.practice_keywords = doctor.practice_keywords ?? [];
+  doctor.fellowships = doctor.fellowships ?? [];
+  doctor.professional_titles = doctor.professional_titles ?? [];
+  doctor.medical_societies = doctor.medical_societies ?? [];
+  doctor.scientific_identifiers = doctor.scientific_identifiers ?? {};
+  doctor.is_demo = doctor.is_demo ?? false;
+
+  return ok(doctor);
 }
 
 export async function getDoctorRegistrations(

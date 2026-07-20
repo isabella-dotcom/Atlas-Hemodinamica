@@ -67,6 +67,11 @@ export const EXPECTED_MIGRATIONS = [
   "004_unified_doctor_search.sql",
   "005_audit_and_integrity_improvements.sql",
   "006_supabase_integration_fixes.sql",
+  "007_doctor_profile_enrichment.sql",
+  "008_registrations_and_specialties.sql",
+  "009_facilities_enrichment.sql",
+  "010_links_contacts_enrichment.sql",
+  "011_ensure_phase_ac_schema.sql",
 ] as const;
 
 export const APP_VERSION = "0.1.0";

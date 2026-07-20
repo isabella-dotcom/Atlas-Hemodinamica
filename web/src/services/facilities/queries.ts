@@ -101,7 +101,10 @@ export async function getFacilityById(
     return mapSupabaseError(error, "Não foi possível carregar o estabelecimento.");
   }
   if (!data) return fail("Estabelecimento não encontrado.", "NOT_FOUND");
-  return ok(data as HealthFacility);
+  const facility = data as HealthFacility;
+  facility.is_active = facility.is_active ?? true;
+  facility.is_demo = facility.is_demo ?? false;
+  return ok(facility);
 }
 
 export async function listFacilitiesForSelect(): Promise<

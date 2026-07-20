@@ -66,6 +66,7 @@ export function DiagnosticPanel({
         <Item
           label="Supabase"
           value={report.supabaseConfigured ? "Conectado (configurado)" : "Erro de configuração"}
+          tone={report.supabaseConfigured ? "ok" : "fail"}
         />
         <Item label="Autenticado" value={report.authenticated ? "sim" : "não"} />
         <Item label="Perfil" value={report.profileFound ? "encontrado" : "ausente"} />
@@ -83,18 +84,63 @@ export function DiagnosticPanel({
         <Item
           label="Leitura do banco"
           value={report.databaseReadable ? "ok" : "falhou"}
+          tone={report.databaseReadable ? "ok" : "fail"}
         />
-        <Item label="Bucket evidences" value={labelStatus(report.buckets.evidences)} />
-        <Item label="Bucket imports" value={labelStatus(report.buckets.imports)} />
-        <Item label="RPC search_doctors" value={labelStatus(report.rpcs.search_doctors)} />
+        <Item
+          label="Schema Fase A–C"
+          value={labelStatus(report.schemaPhaseAc)}
+          tone={toneFromStatus(report.schemaPhaseAc)}
+        />
+        <Item
+          label="Bucket evidences"
+          value={labelStatus(report.buckets.evidences)}
+          tone={toneFromStatus(report.buckets.evidences)}
+        />
+        <Item
+          label="Bucket imports"
+          value={labelStatus(report.buckets.imports)}
+          tone={toneFromStatus(report.buckets.imports)}
+        />
+        <Item
+          label="RPC search_doctors"
+          value={labelStatus(report.rpcs.search_doctors)}
+          tone={toneFromStatus(report.rpcs.search_doctors)}
+        />
         <Item
           label="RPC explain_doctor_confidence"
           value={labelStatus(report.rpcs.explain_doctor_confidence)}
+          tone={toneFromStatus(report.rpcs.explain_doctor_confidence)}
         />
-        <Item label="RPC write_audit_log" value={labelStatus(report.rpcs.write_audit_log)} />
+        <Item
+          label="RPC write_audit_log"
+          value={labelStatus(report.rpcs.write_audit_log)}
+          tone={toneFromStatus(report.rpcs.write_audit_log)}
+        />
         <Item
           label="RPC diagnostic_foundation_check"
           value={labelStatus(report.rpcs.diagnostic_foundation_check)}
+          tone={toneFromStatus(report.rpcs.diagnostic_foundation_check)}
+        />
+        <Item
+          label="RPC diagnostic_phase_ac_check"
+          value={labelStatus(report.rpcs.diagnostic_phase_ac_check)}
+          tone={toneFromStatus(report.rpcs.diagnostic_phase_ac_check)}
+        />
+        <Item
+          label="Médicos demo (is_demo)"
+          value={
+            report.demoCounts.doctors == null
+              ? "—"
+              : String(report.demoCounts.doctors)
+          }
+        />
+        <Item
+          label="Estabelecimentos demo"
+          value={
+            report.demoCounts.facilities == null
+              ? "—"
+              : String(report.demoCounts.facilities)
+          }
         />
       </dl>
 
@@ -106,9 +152,19 @@ export function DiagnosticPanel({
           ))}
         </ul>
         <p className="mt-3 text-xs text-[var(--muted)]">
-          Confirme no SQL Editor se foram aplicadas na ordem. A aplicação não lê o histórico remoto automaticamente.
+          Confirme no SQL Editor se foram aplicadas na ordem. Se o schema Fase A–C
+          estiver vermelho, aplique 007–011 e rode supabase/checks/verify_phase_ac.sql.
         </p>
       </section>
+
+      {report.schemaDetails ? (
+        <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5">
+          <h3 className="text-sm font-medium">Detalhe schema Fase A–C (RPC Master)</h3>
+          <pre className="mt-3 overflow-auto rounded-md bg-[var(--surface-2)] p-3 text-xs">
+            {JSON.stringify(report.schemaDetails, null, 2)}
+          </pre>
+        </section>
+      ) : null}
 
       {report.foundation ? (
         <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5">
@@ -148,6 +204,8 @@ function labelStatus(status: CheckStatus): string {
   switch (status) {
     case "ok":
       return "ok";
+    case "partial":
+      return "parcial / migration incompleta";
     case "fail":
       return "falhou / migration pendente";
     case "unavailable":
@@ -161,11 +219,34 @@ function labelStatus(status: CheckStatus): string {
   }
 }
 
-function Item({ label, value }: { label: string; value: string }) {
+function toneFromStatus(status: CheckStatus): "ok" | "partial" | "fail" | undefined {
+  if (status === "ok") return "ok";
+  if (status === "partial") return "partial";
+  if (status === "fail" || status === "unconfigured") return "fail";
+  return undefined;
+}
+
+function Item({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "ok" | "partial" | "fail";
+}) {
+  const color =
+    tone === "ok"
+      ? "text-emerald-800"
+      : tone === "partial"
+        ? "text-amber-800"
+        : tone === "fail"
+          ? "text-rose-800"
+          : "text-[var(--ink)]";
   return (
     <div>
       <dt className="text-xs uppercase tracking-wide text-[var(--muted)]">{label}</dt>
-      <dd className="mt-1 text-sm text-[var(--ink)]">{value}</dd>
+      <dd className={`mt-1 text-sm font-medium ${color}`}>{value}</dd>
     </div>
   );
 }

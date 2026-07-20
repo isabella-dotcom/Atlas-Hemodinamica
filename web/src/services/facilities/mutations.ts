@@ -3,12 +3,43 @@
 import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "@/lib/audit";
 import { normalizeCnpj, normalizeUf } from "@/lib/format";
+import { normalizePersonName } from "@/lib/utils";
 import { requireWriter } from "@/lib/require-writer";
 import { fail, mapSupabaseError, ok, type ServiceResult } from "@/lib/service-result";
 import {
   facilityCreateSchema,
   facilityUpdateSchema,
+  triStateToBool,
 } from "@/services/facilities/schemas";
+
+function buildFacilityPatch(values: Record<string, unknown>) {
+  const patch: Record<string, unknown> = { ...values };
+
+  if (typeof values.name === "string") {
+    patch.normalized_name = normalizePersonName(values.name);
+  }
+  if (values.cnpj !== undefined) {
+    patch.cnpj = values.cnpj ? normalizeCnpj(String(values.cnpj)) : null;
+  }
+  if (typeof values.state_uf === "string") {
+    patch.state_uf = normalizeUf(values.state_uf);
+  }
+  if (values.cnes !== undefined) {
+    patch.cnes = values.cnes ? String(values.cnes).trim() : null;
+  }
+
+  for (const key of ["attends_sus", "attends_private", "attends_insurance"] as const) {
+    if (values[key] !== undefined) {
+      patch[key] = triStateToBool(values[key] as "unknown" | "yes" | "no");
+    }
+  }
+
+  for (const key of Object.keys(patch)) {
+    if (patch[key] === "") patch[key] = null;
+  }
+
+  return patch;
+}
 
 export async function createFacilityAction(
   input: unknown,
@@ -22,7 +53,6 @@ export async function createFacilityAction(
     return fail(parsed.error.issues[0]?.message ?? "Dados inválidos.");
   }
   const values = parsed.data;
-  const cnpj = values.cnpj ? normalizeCnpj(values.cnpj) : null;
   const cnes = values.cnes?.trim() || null;
 
   if (cnes) {
@@ -40,34 +70,20 @@ export async function createFacilityAction(
     }
   }
 
+  const patch = buildFacilityPatch(values as unknown as Record<string, unknown>);
+
   const { data, error } = await supabase
     .from("health_facilities")
     .insert({
-      name: values.name,
-      trade_name: values.trade_name || null,
+      ...patch,
       cnes,
-      cnpj,
-      facility_type: values.facility_type || null,
-      city: values.city,
-      state_uf: normalizeUf(values.state_uf),
-      address_street: values.address_street || null,
-      address_number: values.address_number || null,
-      address_district: values.address_district || null,
-      address_zip: values.address_zip || null,
-      phone: values.phone || null,
-      email: values.email || null,
-      website: values.website || null,
-      attends_sus:
-        values.attends_sus === "unknown"
-          ? null
-          : values.attends_sus === "yes",
-      has_hemodynamics: values.has_hemodynamics,
-      service_status: values.service_status || "desconhecido",
-      source_id: values.source_id || null,
-      notes: values.notes || null,
-      confidence_score: values.confidence_score,
       layer: "candidato",
       created_by: profile.id,
+      is_demo: false,
+      has_hemodynamics: values.has_hemodynamics,
+      confidence_score: values.confidence_score,
+      is_active: values.is_active ?? true,
+      service_status: values.service_status || "desconhecido",
     })
     .select("id")
     .single();
@@ -109,17 +125,8 @@ export async function updateFacilityAction(
   if (!before) return fail("Estabelecimento não encontrado.", "NOT_FOUND");
 
   const values = parsed.data;
-  const patch: Record<string, unknown> = { ...values };
-  if (values.cnpj !== undefined) patch.cnpj = values.cnpj ? normalizeCnpj(values.cnpj) : null;
-  if (values.state_uf) patch.state_uf = normalizeUf(values.state_uf);
-  if (values.attends_sus) {
-    patch.attends_sus =
-      values.attends_sus === "unknown" ? null : values.attends_sus === "yes";
-  }
-  if (values.source_id === "") patch.source_id = null;
-  if (values.email === "") patch.email = null;
-  if (values.website === "") patch.website = null;
-  if (values.last_validated_at === "") patch.last_validated_at = null;
+  const patch = buildFacilityPatch(values as unknown as Record<string, unknown>);
+
   if (values.cnes !== undefined) {
     const cnes = values.cnes?.trim() || null;
     patch.cnes = cnes;
@@ -170,6 +177,7 @@ export async function archiveFacilityAction(
     .from("health_facilities")
     .update({
       is_deleted: true,
+      is_active: false,
       archived_at: new Date().toISOString(),
       archived_by: profile.id,
       archive_reason: reason || "Arquivado",
@@ -188,5 +196,38 @@ export async function archiveFacilityAction(
   });
 
   revalidatePath("/estabelecimentos");
+  return ok({ id });
+}
+
+export async function restoreFacilityAction(
+  id: string,
+): Promise<ServiceResult<{ id: string }>> {
+  const gate = await requireWriter();
+  if (!gate.ok) return gate.error;
+  const { supabase } = gate;
+
+  const { error } = await supabase
+    .from("health_facilities")
+    .update({
+      is_deleted: false,
+      is_active: true,
+      archived_at: null,
+      archived_by: null,
+      archive_reason: null,
+    })
+    .eq("id", id);
+
+  if (error) {
+    return mapSupabaseError(error, "Não foi possível restaurar o estabelecimento.");
+  }
+
+  await writeAuditLog(supabase, {
+    action: "facility.restore",
+    entityType: "facility",
+    entityId: id,
+  });
+
+  revalidatePath("/estabelecimentos");
+  revalidatePath(`/estabelecimentos/${id}`);
   return ok({ id });
 }

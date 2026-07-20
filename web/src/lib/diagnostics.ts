@@ -7,7 +7,8 @@ export type CheckStatus =
   | "unavailable"
   | "forbidden"
   | "unconfigured"
-  | "unknown";
+  | "unknown"
+  | "partial";
 
 export type DiagnosticReport = {
   checkedAt: string;
@@ -29,12 +30,32 @@ export type DiagnosticReport = {
     explain_doctor_confidence: CheckStatus;
     write_audit_log: CheckStatus;
     diagnostic_foundation_check: CheckStatus;
+    diagnostic_phase_ac_check: CheckStatus;
   };
+  schemaPhaseAc: CheckStatus;
+  schemaDetails: Record<string, unknown> | null;
+  demoCounts: { doctors: number | null; facilities: number | null };
   foundation: Record<string, unknown> | null;
   expectedMigrations: readonly string[];
   notes: string[];
   guidance: string[];
 };
+
+async function probeColumn(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: { from: (t: string) => any },
+  table: string,
+  column: string,
+): Promise<boolean> {
+  const { error } = await supabase.from(table).select(column).limit(1);
+  if (!error) return true;
+  const message = (error.message ?? "").toLowerCase();
+  return !(
+    message.includes("column") ||
+    message.includes(column.toLowerCase()) ||
+    error.code === "42703"
+  );
+}
 
 export async function runFoundationDiagnostic(): Promise<DiagnosticReport> {
   const notes: string[] = [];
@@ -56,7 +77,11 @@ export async function runFoundationDiagnostic(): Promise<DiagnosticReport> {
       explain_doctor_confidence: "unknown",
       write_audit_log: "unknown",
       diagnostic_foundation_check: "unknown",
+      diagnostic_phase_ac_check: "unknown",
     },
+    schemaPhaseAc: "unknown",
+    schemaDetails: null,
+    demoCounts: { doctors: null, facilities: null },
     foundation: null,
     expectedMigrations: EXPECTED_MIGRATIONS,
     notes,
@@ -137,7 +162,6 @@ export async function runFoundationDiagnostic(): Promise<DiagnosticReport> {
       }
     }
 
-    // RPC probes (somente leitura / no-op seguro)
     const { error: searchError } = await supabase.rpc("search_doctors", {
       p_search: "__diagnostic__",
       p_limit: 1,
@@ -152,15 +176,55 @@ export async function runFoundationDiagnostic(): Promise<DiagnosticReport> {
     const { error: confError } = await supabase.rpc("explain_doctor_confidence", {
       p_doctor_id: "00000000-0000-4000-8000-000000000000",
     });
-    // not_found JSON still means function exists
     report.rpcs.explain_doctor_confidence = confError ? "fail" : "ok";
     if (confError) {
       notes.push("RPC explain_doctor_confidence indisponível.");
       guidance.push("Aplique a migration 004.");
     }
 
-    // write_audit_log: não grava evento de teste automaticamente aqui
-    // Apenas checa existência via diagnostic_foundation_check quando Master
+    // Probes de colunas Fase A–C (sem information_schema)
+    const probes: Array<[string, string]> = [
+      ["doctors", "social_name"],
+      ["doctors", "is_demo"],
+      ["doctors", "biography"],
+      ["medical_registrations", "verification_status"],
+      ["health_facilities", "normalized_name"],
+      ["health_facilities", "has_catheterization_lab"],
+      ["doctor_facility_links", "function_title"],
+      ["professional_contacts", "contact_status"],
+    ];
+    let okCount = 0;
+    const missing: string[] = [];
+    for (const [table, column] of probes) {
+      const present = await probeColumn(supabase, table, column);
+      if (present) okCount += 1;
+      else missing.push(`${table}.${column}`);
+    }
+    if (okCount === probes.length) {
+      report.schemaPhaseAc = "ok";
+    } else if (okCount === 0) {
+      report.schemaPhaseAc = "fail";
+      notes.push("Colunas da Fase A–C ausentes (migrations 007–011 não aplicadas).");
+      guidance.push("No SQL Editor, aplique 007→011 nesta ordem e rode verify_phase_ac.sql.");
+    } else {
+      report.schemaPhaseAc = "partial";
+      notes.push(`Schema parcial. Ausentes: ${missing.join(", ")}`);
+      guidance.push("Aplique a migration 011_ensure_phase_ac_schema.sql para completar.");
+    }
+
+    const { count: demoDoctors } = await supabase
+      .from("doctors")
+      .select("id", { count: "exact", head: true })
+      .eq("is_demo", true);
+    const { count: demoFacilities } = await supabase
+      .from("health_facilities")
+      .select("id", { count: "exact", head: true })
+      .eq("is_demo", true);
+    report.demoCounts = {
+      doctors: demoDoctors ?? null,
+      facilities: demoFacilities ?? null,
+    };
+
     if (profile?.role === "master") {
       const { data: foundation, error: diagError } = await supabase.rpc(
         "diagnostic_foundation_check",
@@ -180,8 +244,21 @@ export async function runFoundationDiagnostic(): Promise<DiagnosticReport> {
           guidance.push("Aplique a migration 005.");
         }
       }
+
+      const { data: phaseAc, error: phaseError } = await supabase.rpc(
+        "diagnostic_phase_ac_check",
+      );
+      if (phaseError) {
+        report.rpcs.diagnostic_phase_ac_check = "fail";
+        notes.push("RPC diagnostic_phase_ac_check indisponível.");
+        guidance.push("Aplique a migration 011_ensure_phase_ac_schema.sql.");
+      } else {
+        report.rpcs.diagnostic_phase_ac_check = "ok";
+        report.schemaDetails = phaseAc as Record<string, unknown>;
+      }
     } else {
       report.rpcs.diagnostic_foundation_check = "forbidden";
+      report.rpcs.diagnostic_phase_ac_check = "forbidden";
       report.rpcs.write_audit_log = "unknown";
     }
   } catch {

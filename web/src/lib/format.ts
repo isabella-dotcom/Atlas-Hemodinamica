@@ -1,7 +1,41 @@
 import { normalizePersonName } from "@/lib/utils";
 
+/**
+ * Normaliza CRM/RQE: remove pontuação, preserva dígitos (incluindo zeros à esquerda).
+ */
 export function normalizeCrmNumber(value: string): string {
   return value.replace(/\D/g, "");
+}
+
+/** Extrai apenas dígitos do telefone (formato armazenado). */
+export function normalizePhoneDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+/** Exibe telefone BR de forma amigável sem alterar o valor persistido. */
+export function formatPhoneDisplay(value: string | null | undefined): string {
+  if (!value) return "";
+  const digits = normalizePhoneDigits(value);
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return value;
+}
+
+/** Máscara de input de telefone (apenas UI). */
+export function maskPhoneInput(value: string): string {
+  const digits = normalizePhoneDigits(value).slice(0, 11);
+  if (digits.length <= 2) return digits.length ? `(${digits}` : "";
+  if (digits.length <= 6) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  }
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
 export function normalizeCnpj(value: string): string {
