@@ -354,6 +354,60 @@ export interface Evidence {
   created_at: string;
 }
 
+export interface ImportBatch {
+  id: string;
+  file_name: string;
+  file_type: string | null;
+  file_hash: string | null;
+  storage_path: string | null;
+  status: ImportStatus;
+  entity_type: string | null;
+  source_id: string | null;
+  competencia: string | null;
+  state_uf: string | null;
+  encoding: string | null;
+  delimiter: string | null;
+  column_mapping: Record<string, string> | null;
+  row_count: number | null;
+  valid_count: number | null;
+  invalid_count: number | null;
+  duplicate_count: number | null;
+  doctors_found: number | null;
+  facilities_found: number | null;
+  links_found: number | null;
+  contacts_found: number | null;
+  evidences_found: number | null;
+  preview_summary: Record<string, unknown> | null;
+  uploaded_by: string | null;
+  confirmed_by: string | null;
+  confirmed_at: string | null;
+  cancelled_by: string | null;
+  cancelled_at: string | null;
+  processing_started_at: string | null;
+  processing_finished_at: string | null;
+  reprocessed_from: string | null;
+  error_message: string | null;
+  error_report: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RawRecord {
+  id: string;
+  batch_id: string;
+  row_number: number | null;
+  payload: Record<string, unknown> | null;
+  normalized_payload: Record<string, unknown> | null;
+  validation_errors: string[] | null;
+  is_valid: boolean | null;
+  is_duplicate: boolean;
+  match_status: string;
+  linked_doctor_id: string | null;
+  linked_facility_id: string | null;
+  error_message: string | null;
+  created_at: string;
+}
+
 export interface ReviewQueueItem {
   id: string;
   doctor_id: string | null;

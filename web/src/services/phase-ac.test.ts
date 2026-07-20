@@ -29,9 +29,10 @@ const FACILITY_ID = "6ba7b810-9dad-41d1-80b4-00c04fd430c8";
 const SPECIALTY_ID = "7ba7b810-9dad-41d1-80b4-00c04fd430c9";
 
 describe("migrations e seed", () => {
-  it("lista migrations 007–011 esperadas", () => {
+  it("lista migrations 007–012 esperadas", () => {
     expect(EXPECTED_MIGRATIONS).toContain("007_doctor_profile_enrichment.sql");
     expect(EXPECTED_MIGRATIONS).toContain("011_ensure_phase_ac_schema.sql");
+    expect(EXPECTED_MIGRATIONS).toContain("012_import_workflow_enrichment.sql");
   });
 
   it("011 é idempotente (if not exists)", () => {

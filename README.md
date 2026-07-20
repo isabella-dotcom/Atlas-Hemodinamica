@@ -28,6 +28,7 @@ Papéis no banco (`app_role`): `master`, `analista`, `visualizador`.
    - `009_facilities_enrichment.sql`
    - `010_links_contacts_enrichment.sql`
    - `011_ensure_phase_ac_schema.sql` (rede de segurança idempotente)
+   - `012_import_workflow_enrichment.sql` (fluxo de importação RAW → candidato)
 3. Confirmar buckets privados `imports` e `evidences`.
 4. Criar usuários **somente no Auth** (sem cadastro público na app):
    - Master, Analista, Visualizador (e-mails de teste do proprietário).
@@ -78,6 +79,24 @@ select extensions.unaccent('Hemodinâmica');
 select public.normalize_search_text('José da Silva');
 select public.diagnostic_foundation_check(); -- somente Master
 ```
+
+## Importação de dados reais
+
+Fluxo completo em `/importacoes` (Master/Analista):
+
+1. Baixar templates (fictícios) na própria tela ou ver `docs/templates-importacao.md`
+2. Preencher CSV/XLSX com dados obtidos legitimamente
+3. Informar entidade, fonte, competência e UF
+4. Revisar mapeamento + prévia → confirmar → candidatos na `/validacao`
+5. Aprovar humanamente para base oficial
+
+Documentação:
+
+- [Importação de dados reais](docs/importacao-dados-reais.md)
+- [Templates](docs/templates-importacao.md)
+- [Operação Master](docs/operacao-isabella-master.md)
+
+**AVISO:** não versionar CSV/XLSX/ZIP reais (`data/`, `imports/`, `uploads/`). Fixtures fictícios ficam em `web/src/test/fixtures/`.
 
 ## Validação ponta a ponta (checklist)
 
@@ -207,7 +226,7 @@ Correções:
 ## Limitações atuais
 
 - Sem CNES/CFM automático, scraping, WhatsApp, IA
-- Importação ainda em prévia bruta
+- Importação completa via arquivo (RAW → candidato → fila); promoção a oficial só com revisão humana
 - Integração real depende de `web/.env.local` do proprietário
 - E2E preparado, não executado sem credenciais
 

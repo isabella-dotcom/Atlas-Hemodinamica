@@ -30,8 +30,10 @@ coverage/
 dist/
 build/
 
-# Data reais / arquivos de importação (nunca versionar)
-data/
+# Dados reais / arquivos de importação (nunca versionar)
+/data/
+/imports/
+/uploads/
 *.csv
 *.xlsx
 *.xls
@@ -40,6 +42,12 @@ data/
 *.sqlite
 *.sqlite3
 !etl/samples/.gitkeep
+# Exceções: templates e fixtures fictícios
+!web/public/templates/
+!web/public/templates/**
+!web/src/test/fixtures/
+!web/src/test/fixtures/**
+!web/src/services/imports/
 
 # Python
 __pycache__/

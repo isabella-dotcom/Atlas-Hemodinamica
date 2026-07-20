@@ -1,0 +1,2 @@
+doctor_crm,doctor_crm_uf,facility_cnes,contact_type,contact_value,label,is_institutional,is_public,is_primary,accepts_contact,do_not_contact,contact_status,source_origin,source_code,source_url,collected_at,verified_at,notes
+900001,MG,,email,medico@example.com,Profissional,false,true,true,true,false,nao_validado,,,https://fonte.example.com,2026-01-15,,sem origem
